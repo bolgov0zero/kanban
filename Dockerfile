@@ -40,7 +40,6 @@ RUN apt-get update && \
     chmod -R 775 /opt/ads /opt/ads/thumbnails /data /var/log && \
     \
     # === Добавлено: Подготовка /data для БД ===
-    touch /data/db.sqlite && \
     chown www-data:www-data /data/db.sqlite && \
     chmod 664 /data/db.sqlite && \
     \
