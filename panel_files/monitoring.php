@@ -35,29 +35,30 @@ while (true) {
 
 		$threshold_sec = $tg['timer_threshold'] * 60; // минуты -> секунды
 
-		// Запрос: задачи с таймером, notified_at NULL, elapsed > threshold
+		// Запрос: задачи с таймером, notified_at NULL, elapsed > threshold (используем UTC strftime)
 		$query = "SELECT t.id, t.title, t.moved_at FROM tasks t 
 				  JOIN columns c ON t.column_id = c.id 
 				  WHERE c.timer = 1 
 				  AND t.moved_at IS NOT NULL 
 				  AND t.notified_at IS NULL 
-				  AND (strftime('%s', 'now') - strftime('%s', t.moved_at)) > :threshold";
+				  AND (strftime('%s', 'now', 'utc') - strftime('%s', t.moved_at)) > :threshold";
 		$stmt = $db->prepare($query);
 		$stmt->bindValue(':threshold', $threshold_sec, SQLITE3_INTEGER);
 		$result = $stmt->execute();
 
 		while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-			$elapsed_sec = time() - strtotime($row['moved_at']);
-			$elapsed = gmdate('H:i:s', $elapsed_sec); // формат времени
+			$moved_time = strtotime($row['moved_at'] . ' UTC');  // Парсим как UTC
+			$elapsed_sec = time() - $moved_time;  // Текущее time() - UTC moved
+			$elapsed = gmdate('H:i:s', $elapsed_sec); // UTC формат
 
-			$text = "🚨 <b>Забытая задача!</b>\n<blockquote>📋 <b>Задача:</b> <i>" . htmlspecialchars($row['title']) . "</i>\n🕐 <b>Время в колонке:</b> <i>$elapsed</i></blockquote>";
+			$text = "⏰ <b>Таймер превышен!</b>\n<blockquote>📋 <b>Задача:</b> <i>" . htmlspecialchars($row['title']) . "</i>\n🕐 <b>Время в колонке:</b> <i>$elapsed</i></blockquote>";
 
 			if (sendTelegram($tg['bot_token'], $tg['chat_id'], $text)) {
 				// Отметить как уведомлённую
-				$update = $db->prepare("UPDATE tasks SET notified_at = datetime('now') WHERE id = :id");
+				$update = $db->prepare("UPDATE tasks SET notified_at = datetime('now', 'utc') WHERE id = :id");  // UTC для notified_at
 				$update->bindValue(':id', $row['id'], SQLITE3_INTEGER);
 				$update->execute();
-				echo date('Y-m-d H:i:s') . " - Уведомление отправлено для задачи ID {$row['id']}\n";
+				echo date('Y-m-d H:i:s') . " - Уведомление отправлено для задачи ID {$row['id']} (elapsed: $elapsed)\n";
 			} else {
 				echo date('Y-m-d H:i:s') . " - Ошибка отправки для задачи ID {$row['id']}\n";
 			}

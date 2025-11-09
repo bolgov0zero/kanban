@@ -175,29 +175,30 @@ switch ($action) {
 		$stmt->bindValue(':c', $col_id, SQLITE3_INTEGER);
 		$stmt->bindValue(':id', $task_id, SQLITE3_INTEGER);
 		$stmt->execute();
-
+		
 		// Получаем данные колонки для уведомлений
 		$col = $db->querySingle("SELECT * FROM columns WHERE id = $col_id", true);
 		$title = $db->querySingle("SELECT title FROM tasks WHERE id = $task_id", true)['title'] ?? 'Без названия';
 		$resp = $db->querySingle("SELECT responsible FROM tasks WHERE id = $task_id", true)['responsible'] ?? 'Не указан';
 		$resp_name = $db->querySingle("SELECT name FROM users WHERE username='$resp'", true)['name'] ?? $resp;
 		$col_name = $col['name'] ?? 'Неизвестная колонка';
-
-		// Если колонка с таймером, обновляем moved_at и сбрасываем notified_at
+		
+		// Если колонка с таймером, обновляем moved_at в UTC и сбрасываем notified_at
 		if ($col['timer']) {
-			$stmt_move = $db->prepare("UPDATE tasks SET moved_at = datetime('now'), notified_at = NULL WHERE id = :id");
+			$stmt_move = $db->prepare("UPDATE tasks SET moved_at = :moved, notified_at = NULL WHERE id = :id");
+			$stmt_move->bindValue(':moved', gmdate('Y-m-d H:i:s'), SQLITE3_TEXT);  // UTC time
 			$stmt_move->bindValue(':id', $task_id, SQLITE3_INTEGER);
 			$stmt_move->execute();
 		}
-
-		// Уведомление о перемещении
+		
+		// Уведомление о перемещении (без изменений)
 		if (!empty($bot_token) && !empty($chat_id)) {
 			$move_text = "➡️ <b>Задача перемещена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i>\n📂 <b>В колонку:</b> <i>$col_name</i>\n🧑‍💻 <b>Исполнитель:</b> <i>$resp_name</i></blockquote>";
 			$result = sendTelegram($bot_token, $chat_id, $move_text);
 			if (!$result) error_log("Failed to send move task notification");
 		}
 		
-		// Уведомление о завершении, если колонка с auto_complete
+		// Уведомление о завершении, если колонка с auto_complete (без изменений)
 		if ($col['auto_complete']) {
 			$complete_text = "✅ <b>Задача завершена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i></blockquote>";
 			sendTelegram($bot_token, $chat_id, $complete_text);
