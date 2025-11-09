@@ -33,7 +33,7 @@ fi
 # Этап 1: Установка Ads Panel
 sleep 1
 echo -ne "[ ] Подготовка к запуску.\r"
-mkdir ads && cd ads
+mkdir kanban && cd kanban
 cat << EOF > docker-compose.yml
 services:
   web:
@@ -42,17 +42,10 @@ services:
 	ports:
 	  - "80:80"
 	  - "443:443"
-	  - "8443:443"
 	volumes:
 	  - db_data:/data
-	  - ssl:/etc/apache2/ssl
-	environment:
-	  - PHP_UPLOAD_MAX_FILESIZE=500M
-	  - PHP_POST_MAX_SIZE=500M
 volumes:
-  file_storage:
   db_data:
-  ssl:
 EOF
 sleep 2
 if [ $? -eq 0 ]; then
