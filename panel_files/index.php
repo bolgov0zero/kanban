@@ -137,7 +137,7 @@ $columns = $db->query("SELECT * FROM columns");
 </div>
 </main>
 <footer class="footer mt-auto bg-gray-800 text-gray-400 text-center py-4 text-sm rounded-t-lg rounded-b-lg">
-	2025 © Болгов Иван
+	2025 © bolgov0zero | Версия: <span id="appVersion">Загрузка...</span>
 </footer>
 <script>
 var isAdmin = <?= $isAdmin ? 'true' : 'false' ?>;
