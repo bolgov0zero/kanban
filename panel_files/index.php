@@ -149,17 +149,17 @@ $version = $versionData['version'] ?? 'unknown';
 <script>
 var isAdmin = <?= $isAdmin ? 'true' : 'false' ?>;
 
-// Функция для парсинга даты как UTC (без TZ смещения)
-function parseUTCMovedDate(dateStr) {
-  // dateStr в формате 'YYYY-MM-DD HH:MM:SS' (UTC от сервера)
-  const isoStr = dateStr.replace(' ', 'T') + 'Z';  // Добавляем 'Z' для UTC
+// Функция для парсинга даты из Moscow timezone (UTC+3)
+function parseMoscowDate(dateStr) {
+  // dateStr в формате 'YYYY-MM-DD HH:MM:SS'
+  const isoStr = dateStr.replace(' ', 'T') + '+03:00';
   return new Date(isoStr);
 }
 
-// Обновление дат создания задач (локальное время браузера) — без изменений
+// Обновление дат создания задач (локальное время браузера)
 function updateCreatedDates() {
   document.querySelectorAll('.created-date[data-created]').forEach(el => {
-	const moscowDate = parseMoscowDate(el.getAttribute('data-created'));  // Оставляем для created_at (Moscow)
+	const moscowDate = parseMoscowDate(el.getAttribute('data-created'));
 	const options = { 
 	  day: '2-digit', 
 	  month: '2-digit', 
@@ -172,7 +172,7 @@ function updateCreatedDates() {
   });
 }
 
-// Обновление дедлайнов (локальное время) — без изменений
+// Обновление дедлайнов (локальное время)
 function updateDeadlines() {
   document.querySelectorAll('.deadline-tag[data-deadline]').forEach(el => {
 	const deadlineStr = el.getAttribute('data-deadline'); // 'YYYY-MM-DD'
@@ -190,7 +190,7 @@ function updateDeadlines() {
   });
 }
 
-// Динамический таймер (elapsed time в UTC, без локального TZ)
+// Динамический таймер (elapsed time, отображение в локальном формате, но diff универсален)
 function updateTimers() {
   document.querySelectorAll('[data-timer-enabled="true"]').forEach(task => {
 	const movedAtStr = task.getAttribute('data-moved-at');
@@ -198,27 +198,21 @@ function updateTimers() {
 	const timerEl = document.getElementById('timer-' + taskId);
 	if (!timerEl || !movedAtStr) return;
 
-	const utcMovedDate = parseUTCMovedDate(movedAtStr);  // Парсим как UTC
-	const nowMs = Date.now();  // Текущее UTC ms
-	const diffMs = nowMs - utcMovedDate.getTime();  // ms, чистая разница
+	const moscowMovedDate = parseMoscowDate(movedAtStr);
+	const now = new Date(); // Локальное время браузера
+	const diff = now.getTime() - moscowMovedDate.getTime(); // ms, учитывая TZ при парсинге
 
-	const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-	const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-	const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-	const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+	const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+	const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+	const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+	const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
 	let timerStr = '';
 	if (days > 0) timerStr += days + 'д ';
 	timerStr += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 
-	timerEl.innerHTML = '⏱️ ' + timerStr;  // innerHTML для emoji
+	timerEl.textContent = '⏱️ ' + timerStr;
   });
-}
-
-// Функция для парсинга Moscow дат (оставляем для created_at и deadline)
-function parseMoscowDate(dateStr) {
-  const isoStr = dateStr.replace(' ', 'T') + '+03:00';
-  return new Date(isoStr);
 }
 
 // Инициализация всех обновлений при загрузке
@@ -231,54 +225,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Запуск обновления таймера каждую секунду
 setInterval(updateTimers, 1000);
 
-function openAddTask() {
-	let respOptions = users.map(u => `<option value='${u.username}'>${u.name || u.username}</option>`).join('');
-	let colOptions = <?= json_encode($db->query("SELECT id, name FROM columns")->fetchAll(SQLITE3_ASSOC)) ?>.map(c => `<option value='${c.id}'>${c.name}</option>`).join('');
-	openModal(`
-		<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">X</button>
-		<h2 class="text-lg font-semibold mb-3">Новая задача</h2>
-		<label class="block text-xs text-gray-400 mb-1">Заголовок</label>
-		<input id="title" placeholder="..." class="w-full p-1.5 mb-2 rounded bg-gray-700 text-xs">
-		<label class="block text-xs text-gray-400 mb-1">Описание</label>
-		<textarea id="desc" placeholder="..." class="w-full p-1.5 mb-2 rounded bg-gray-700 text-xs h-16"></textarea>
-		<label class="block text-xs text-gray-400 mb-1">Исполнитель</label>
-		<select id="resp" class="w-full p-1.5 mb-2 rounded bg-gray-700 text-xs">${respOptions}</select>
-		<label class="block text-xs text-gray-400 mb-1">Срок</label>
-		<input id="deadline" type="date" class="w-full p-1.5 mb-2 rounded bg-gray-700 text-xs">
-		<label class="block text-xs text-gray-400 mb-1">Важность</label>
-		<select id="imp" class="w-full p-1.5 mb-2 rounded bg-gray-700 text-xs">
-			<option value="не срочно">Не срочно</option>
-			<option value="средне">Средне</option>
-			<option value="срочно">Срочно</option>
-		</select>
-		<label class="block text-xs text-gray-400 mb-1">Колонка</label>
-		<select id="col" class="w-full p-1.5 mb-3 rounded bg-gray-700 text-xs">${colOptions}</select>
-		<button onclick="saveTask()" class="w-full py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs">Создать</button>
-	`);
-}
-
-function openAddColumn() {
-	openModal(`
-		<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">X</button>
-		<h2 class="text-lg font-semibold mb-3">Новая колонка</h2>
-		<label class="block text-xs text-gray-400 mb-1">Название</label>
-		<input id="colName" placeholder="В работе" class="w-full p-1.5 mb-2 rounded bg-gray-700 text-xs">
-		<label class="block text-xs text-gray-400 mb-1">Заголовок</label>
-		<input id="colBg" type="color" value="#374151" class="w-full h-8 mb-2 rounded">
-		<label class="block text-xs text-gray-400 mb-1">Задачи</label>
-		<input id="taskBg" type="color" value="#1f2937" class="w-full h-8 mb-3 rounded">
-		<div class="flex items-center gap-2 mb-3">
-			<input id="autoComplete" type="checkbox">
-			<label class="text-xs">Автозавершать</label>
-		</div>
-		<div class="flex items-center gap-2 mb-4">
-			<input id="timer" type="checkbox">
-			<label class="text-xs">Таймер</label>
-		</div>
-		<button onclick="saveColumn()" class="w-full py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs">Создать</button>
-	`);
-}
-
+// Если нужно обновлять даты/дедлайны динамически (например, при reload задач), вызовите функции снова
 </script>
 <?php include 'modals.php'; ?>
 </body>
