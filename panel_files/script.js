@@ -364,7 +364,17 @@ function testTelegram() {
 	let data = new URLSearchParams({ action: 'test_telegram' });
 	fetch('api.php', { method: 'POST', body: data })
 		.then(r => r.json())
-		.then(res => alert(res.success || res.error || 'Ошибка'));
+		.then(res => {
+			if (res.success) {
+				alert('✅ ' + res.message);
+			} else {
+				alert('❌ ' + res.message);
+			}
+		})
+		.catch(err => {
+			console.error('Ошибка теста Telegram:', err);
+			alert('Ошибка сети или сервера. Проверьте консоль.');
+		});
 }
 
 // === Редактирование пользователя ===
