@@ -2,10 +2,10 @@ name: Kanban Panel Docker Builder
 
 on:
   workflow_dispatch:
-	branches: ['main']
+    branches: ['main']
   push:
-	branches: ['main', 'dev']
-	paths:
+    branches: ['main', 'dev']
+    paths:
 	  - 'panel_files/**'
 	  - 'Dockerfile'
 	  - 'entrypoint.sh'
