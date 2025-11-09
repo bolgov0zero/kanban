@@ -229,7 +229,6 @@ switch ($action) {
 		} break;
 
 	case 'get_users':
-		if(!$isAdmin) exit('forbidden');
 		$res=$db->query("SELECT username, is_admin, name FROM users ORDER BY username");
 		$list=[];while($r=$res->fetchArray(SQLITE3_ASSOC))$list[]=$r;
 		echo json_encode($list,JSON_UNESCAPED_UNICODE);break;

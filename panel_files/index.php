@@ -54,7 +54,7 @@ $columns = $db->query("SELECT * FROM columns");
 	<div class="flex gap-2 items-center">
 		<span class="username-tag"><?=htmlspecialchars($user_name)?></span>
 		<?php if ($isAdmin): ?><button onclick="openUserSettings()" class="bg-gray-700 px-3 py-1 rounded hover:bg-gray-600">⚙️ Настройки</button><?php endif; ?>
-		<button onclick="openAddColumn()" class="bg-gray-700 px-3 py-1 rounded hover:bg-gray-600">⬇️ Колонка</button>
+		<?php if ($isAdmin): ?><button onclick="openAddColumn()" class="bg-gray-700 px-3 py-1 rounded hover:bg-gray-600">⬇️ Колонка</button><?php endif; ?>
 		<button onclick="openAddTask()" class="bg-gray-700 px-3 py-1 rounded hover:bg-gray-600">✅ Задача</button>
 		<button onclick="openArchive()" class="bg-gray-700 px-3 py-1 rounded hover:bg-gray-600">📦 Архив</button>
 		<a href="logout.php" class="bg-red-700 px-3 py-1 rounded hover:bg-red-600">Выйти</a>
@@ -69,7 +69,7 @@ $columns = $db->query("SELECT * FROM columns");
 	<div class="p-2 text-center rounded flex justify-between items-center mb-2"
 		 style="background:<?=$col['bg_color']?>;color:<?=getContrastColor($col['bg_color'])?>;">
 		<h2 class="font-semibold"><?=$col['name']?></h2>
-		<button onclick="editColumn(<?=$col['id']?>)" class="text-sm opacity-75 hover:opacity-100">✏️</button>
+		<?php if ($isAdmin): ?><button onclick="editColumn(<?=$col['id']?>)" class="text-sm opacity-75 hover:opacity-100">✏️</button><?php endif; ?>
 	</div>
 
 	<div class="flex-1" id="col<?=$col['id']?>">
