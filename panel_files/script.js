@@ -60,35 +60,37 @@ function updateColumn(id) {
 	});
 	fetch('api.php', { method: 'POST', body: data }).then(() => location.reload());
 }
+
 function deleteColumn(id) {
 	if (!confirm('Удалить колонку и все задачи в ней?')) return;
 	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'delete_column', id }) })
 		.then(() => location.reload());
 }
+
 function editColumn(id) {
 	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_column', id }) })
 		.then(r => r.json())
 		.then(c => {
 			openModal(`
-				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">Close</button>
-				<h2 class='text-xl mb-4 font-semibold text-center'>Редактировать колонку</h2>
-				<label class='block mb-1 text-sm text-gray-400'>Название:</label>
-				<input id='colName' value='${c.name}' class='w-full mb-3 p-2 rounded bg-gray-700'>
-				<label class='block mb-1 text-sm text-gray-400'>Цвет заголовка:</label>
-				<input id='colBg' type='color' value='${c.bg_color}' class='w-full mb-3 h-10 rounded'>
-				<label class='block mb-1 text-sm text-gray-400'>Цвет задач:</label>
-				<input id='taskBg' type='color' value='${c.task_color}' class='w-full mb-3 h-10 rounded'>
-				<label class='flex items-center gap-2 mb-3'>
-					<input id='autoComplete' type='checkbox' ${c.auto_complete == 1 ? 'checked' : ''}>
-					<span class='text-sm'>Автозавершать</span>
-				</label>
-				<label class='flex items-center gap-2 mb-3'>
-					<input id='timer' type='checkbox' ${c.timer == 1 ? 'checked' : ''}>
-					<span class='text-sm'>Таймер</span>
-				</label>
-				<div class='flex gap-2'>
-					<button onclick='updateColumn(${id})' class='flex-1 bg-blue-600 hover:bg-blue-500 p-2 rounded'>Сохранить</button>
-					<button onclick='deleteColumn(${id})' class='flex-1 bg-red-700 hover:bg-red-600 p-2 rounded'>Удалить</button>
+				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">X</button>
+				<h2 class="text-lg font-semibold mb-3">Редактировать колонку</h2>
+				<label class="block text-xs text-gray-400 mb-1">Название</label>
+				<input id="colName" value="${c.name}" class="w-full p-2 mb-2 rounded bg-gray-700 text-sm">
+				<label class="block text-xs text-gray-400 mb-1">Заголовок</label>
+				<input id="colBg" type="color" value="${c.bg_color}" class="w-full h-8 mb-2 rounded">
+				<label class="block text-xs text-gray-400 mb-1">Задачи</label>
+				<input id="taskBg" type="color" value="${c.task_color}" class="w-full h-8 mb-3 rounded">
+				<div class="flex items-center gap-2 mb-3">
+					<input id="autoComplete" type="checkbox" ${c.auto_complete ? 'checked' : ''}>
+					<label class="text-xs">Автозавершать</label>
+				</div>
+				<div class="flex items-center gap-2 mb-4">
+					<input id="timer" type="checkbox" ${c.timer ? 'checked' : ''}>
+					<label class="text-xs">Таймер</label>
+				</div>
+				<div class="flex gap-2">
+					<button onclick="updateColumn(${id})" class="flex-1 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm">Сохранить</button>
+					<button onclick="deleteColumn(${id})" class="flex-1 py-1.5 bg-red-700 hover:bg-red-600 rounded text-sm">Удалить</button>
 				</div>
 			`);
 		});
@@ -114,6 +116,7 @@ function saveTask() {
 	});
 	fetch('api.php', { method: 'POST', body: data }).then(() => location.reload());
 }
+
 function updateTask(id) {
 	let data = new URLSearchParams({
 		action: 'update_task',
@@ -126,39 +129,38 @@ function updateTask(id) {
 	});
 	fetch('api.php', { method: 'POST', body: data }).then(() => location.reload());
 }
+
 function deleteTask(id) {
 	if (!confirm('Удалить задачу?')) return;
-	fetch('api.php', {
-		method: 'POST',
-		body: new URLSearchParams({ action: 'delete_task', id })
-	})
+	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'delete_task', id }) })
 		.then(() => location.reload());
 }
+
 function editTask(id) {
 	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_task', id }) })
 		.then(r => r.json())
 		.then(t => {
 			let respOptions = users.map(u => `<option value='${u.username}' ${t.responsible === u.username ? 'selected' : ''}>${u.name || u.username}</option>`).join('');
 			openModal(`
-				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">Close</button>
-				<h2 class='text-xl mb-4 font-semibold text-center'>Редактировать задачу</h2>
-				<label class='block mb-1 text-sm text-gray-400'>Заголовок:</label>
-				<input id='title' value='${t.title || ''}' class='w-full mb-3 p-2 rounded bg-gray-700'>
-				<label class='block mb-1 text-sm text-gray-400'>Описание:</label>
-				<textarea id='desc' class='w-full mb-3 p-2 rounded bg-gray-700'>${t.description || ''}</textarea>
-				<label class='block mb-1 text-sm text-gray-400'>Исполнитель:</label>
-				<select id='resp' class='w-full mb-3 p-2 rounded bg-gray-700'>${respOptions}</select>
-				<label class='block mb-1 text-sm text-gray-400'>Срок:</label>
-				<input id='deadline' type='date' value='${t.deadline || ''}' class='w-full mb-3 p-2 rounded bg-gray-700'>
-				<label class='block mb-1 text-sm text-gray-400'>Важность:</label>
-				<select id='imp' class='w-full mb-3 p-2 rounded bg-gray-700'>
-					<option value='не срочно' ${t.importance === 'не срочно' ? 'selected' : ''}>Не срочно</option>
-					<option value='средне' ${t.importance === 'средне' ? 'selected' : ''}>Средне</option>
-					<option value='срочно' ${t.importance === 'срочно' ? 'selected' : ''}>Срочно</option>
+				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">X</button>
+				<h2 class="text-lg font-semibold mb-3">Редактировать задачу</h2>
+				<label class="block text-xs text-gray-400 mb-1">Заголовок</label>
+				<input id="title" value="${t.title || ''}" class="w-full p-2 mb-2 rounded bg-gray-700 text-sm">
+				<label class="block text-xs text-gray-400 mb-1">Описание</label>
+				<textarea id="desc" class="w-full p-2 mb-2 rounded bg-gray-700 text-sm h-16">${t.description || ''}</textarea>
+				<label class="block text-xs text-gray-400 mb-1">Исполнитель</label>
+				<select id="resp" class="w-full p-2 mb-2 rounded bg-gray-700 text-sm">${respOptions}</select>
+				<label class="block text-xs text-gray-400 mb-1">Срок</label>
+				<input id="deadline" type="date" value="${t.deadline || ''}" class="w-full p-2 mb-2 rounded bg-gray-700 text-sm">
+				<label class="block text-xs text-gray-400 mb-1">Важность</label>
+				<select id="imp" class="w-full p-2 mb-3 rounded bg-gray-700 text-sm">
+					<option value="не срочно" ${t.importance === 'не срочно' ? 'selected' : ''}>Не срочно</option>
+					<option value="средне" ${t.importance === 'средне' ? 'selected' : ''}>Средне</option>
+					<option value="срочно" ${t.importance === 'срочно' ? 'selected' : ''}>Срочно</option>
 				</select>
-				<div class='flex gap-2'>
-					<button onclick='updateTask(${id})' class='flex-1 bg-blue-600 hover:bg-blue-500 p-2 rounded'>Сохранить</button>
-					<button onclick='deleteTask(${id})' class='flex-1 bg-red-700 hover:bg-red-600 p-2 rounded'>Удалить</button>
+				<div class="flex gap-2">
+					<button onclick="updateTask(${id})" class="flex-1 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm">Сохранить</button>
+					<button onclick="deleteTask(${id})" class="flex-1 py-1.5 bg-red-700 hover:bg-red-600 rounded text-sm">Удалить</button>
 				</div>
 			`);
 		})
@@ -172,20 +174,22 @@ function editTask(id) {
 function openModal(content) {
 	document.getElementById('modal-bg').innerHTML = `
 		<div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-			<div class="bg-gray-800 rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto border border-gray-700">
+			<div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto border border-gray-700 p-4">
 				${content}
 			</div>
 		</div>
 	`;
 	document.getElementById('modal-bg').classList.remove('hidden');
 }
+
 function closeModal() {
 	document.getElementById('modal-bg').classList.add('hidden');
 	document.getElementById('modal-bg').innerHTML = '';
 }
 
-// === НАСТРОЙКИ АДМИНИСТРАТОРА (профессиональный дизайн) ===
+// === НАСТРОЙКИ АДМИНИСТРАТОРА (компактное окно) ===
 let usersList = [];
+
 function loadUsersList() {
 	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_users' }) })
 		.then(r => r.json())
@@ -194,6 +198,7 @@ function loadUsersList() {
 			renderUsers('');
 		});
 }
+
 function renderUsers(filter = '') {
 	const list = document.getElementById('users-list');
 	if (!list) return;
@@ -202,10 +207,10 @@ function renderUsers(filter = '') {
 		(u.name && u.name.toLowerCase().includes(filter.toLowerCase()))
 	);
 	list.innerHTML = filtered.map(u => `
-		<div class="flex justify-between items-center p-2 bg-gray-700/50 rounded border border-gray-600">
+		<div class="flex justify-between items-center p-2 bg-gray-700/50 rounded border border-gray-600 text-sm">
 			<div>
-				<div class="font-medium text-sm">${u.username}</div>
-				<div class="text-xs text-gray-400">${u.name||''} ${u.is_admin?'(Админ)':''}</div>
+				<div class="font-medium">${u.username}</div>
+				<div class="text-xs text-gray-400">${u.name || ''} ${u.is_admin ? '(Админ)' : ''}</div>
 			</div>
 			<div class="flex gap-1">
 				<button onclick="editUser('${u.username}')" class="text-blue-400 hover:text-blue-300 text-xs">Edit</button>
@@ -214,9 +219,6 @@ function renderUsers(filter = '') {
 		</div>
 	`).join('');
 }
-document.addEventListener('input', e => {
-	if (e.target.id === 'userSearch') renderUsers(e.target.value);
-});
 
 function openUserSettings() {
 	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_telegram_settings' }) })
@@ -224,61 +226,57 @@ function openUserSettings() {
 		.then(tg => {
 			const html = `
 <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-	<div class="bg-gray-800 rounded-lg shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto border border-gray-700">
-		<!-- Заголовок -->
-		<div class="flex items-center justify-between p-5 border-b border-gray-700">
-			<h2 class="text-xl font-semibold text-gray-100">Настройки администратора</h2>
-			<button onclick="closeModal()" class="text-gray-400 hover:text-gray-200 text-2xl">&times;</button>
+	<div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-gray-700">
+		<div class="flex items-center justify-between p-4 border-b border-gray-700">
+			<h2 class="text-lg font-semibold">Настройки</h2>
+			<button onclick="closeModal()" class="text-gray-400 hover:text-gray-200 text-xl">X</button>
 		</div>
 
-		<!-- Вкладки -->
 		<div class="flex border-b border-gray-700">
-			<button id="tab-users"       class="tab-btn active">Пользователи</button>
-			<button id="tab-telegram"    class="tab-btn">Telegram</button>
-			<button id="tab-notify"      class="tab-btn">Уведомления</button>
+			<button id="tab-users"       class="tab-btn active flex-1 py-2 text-xs">Пользователи</button>
+			<button id="tab-telegram"    class="tab-btn flex-1 py-2 text-xs">Telegram</button>
+			<button id="tab-notify"      class="tab-btn flex-1 py-2 text-xs">Уведомления</button>
 		</div>
 
 		<!-- Пользователи -->
-		<div id="content-users" class="tab-content p-5 space-y-4">
-			<input id="userSearch" placeholder="Поиск…" class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500 text-sm">
-			<div class="flex gap-2">
-				<input id="newUser" placeholder="Логин" class="flex-1 p-2 rounded bg-gray-700 border border-gray-600 text-sm">
-				<input id="newPass" type="password" placeholder="Пароль" class="flex-1 p-2 rounded bg-gray-700 border border-gray-600 text-sm">
-				<input id="newName" placeholder="Имя" class="flex-1 p-2 rounded bg-gray-700 border border-gray-600 text-sm">
-				<button onclick="addUser()" class="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white">Добавить</button>
+		<div id="content-users" class="tab-content p-4 space-y-3">
+			<input id="userSearch" placeholder="Поиск..." class="w-full p-1.5 rounded bg-gray-700 border border-gray-600 text-xs">
+			<div class="flex flex-wrap gap-1">
+				<input id="newUser" placeholder="Логин" class="flex-1 min-w-[70px] p-1.5 rounded bg-gray-700 border border-gray-600 text-xs">
+				<input id="newPass" type="password" placeholder="Пароль" class="flex-1 min-w-[70px] p-1.5 rounded bg-gray-700 border border-gray-600 text-xs">
+				<input id="newName" placeholder="Имя" class="flex-1 min-w-[70px] p-1.5 rounded bg-gray-700 border border-gray-600 text-xs">
+				<button onclick="addUser()" class="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white whitespace-nowrap">+ Добавить</button>
 			</div>
-			<div id="users-list" class="space-y-2 max-h-64 overflow-y-auto"></div>
+			<div id="users-list" class="space-y-1 max-h-48 overflow-y-auto"></div>
 		</div>
 
 		<!-- Telegram -->
-		<div id="content-telegram" class="tab-content hidden p-5 space-y-4">
+		<div id="content-telegram" class="tab-content hidden p-4 space-y-3">
 			<div>
-				<label class="block text-sm font-medium text-gray-300 mb-1">Bot Token</label>
-				<input id="tgToken" value="${tg.bot_token||''}" placeholder="123456:ABC-DEF..." class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-green-500 text-sm">
+				<label class="block text-xs text-gray-400 mb-1">Bot Token</label>
+				<input id="tgToken" value="${tg.bot_token||''}" class="w-full p-1.5 rounded bg-gray-700 border border-gray-600 text-xs">
 			</div>
 			<div>
-				<label class="block text-sm font-medium text-gray-300 mb-1">Chat ID</label>
-				<input id="tgChat" value="${tg.chat_id||''}" placeholder="-1001234567890" class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-green-500 text-sm">
+				<label class="block text-xs text-gray-400 mb-1">Chat ID</label>
+				<input id="tgChat" value="${tg.chat_id||''}" class="w-full p-1.5 rounded bg-gray-700 border border-gray-600 text-xs">
 			</div>
-			<div class="flex gap-2">
-				<button onclick="saveSettings()" class="flex-1 py-2 bg-green-600 hover:bg-green-500 rounded text-sm text-white">Сохранить</button>
-				<button onclick="testTelegram()" class="flex-1 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white">Тест</button>
+			<div class="flex gap-1">
+				<button onclick="saveSettings()" class="flex-1 py-1.5 bg-green-600 hover:bg-green-500 rounded text-xs">Сохранить</button>
+				<button onclick="testTelegram()" class="flex-1 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs">Тест</button>
 			</div>
 		</div>
 
 		<!-- Уведомления -->
-		<div id="content-notify" class="tab-content hidden p-5 space-y-4">
+		<div id="content-notify" class="tab-content hidden p-4 space-y-3">
 			<div>
-				<label class="block text-sm font-medium text-gray-300 mb-1">Порог таймера (минуты)</label>
-				<input id="timerThreshold" type="number" min="1" value="${tg.timer_threshold||60}" class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-green-500 text-sm">
-				<p class="text-xs text-gray-500 mt-1">После этого времени будет отправлено уведомление.</p>
+				<label class="block text-xs text-gray-400 mb-1">Порог таймера (мин)</label>
+				<input id="timerThreshold" type="number" min="1" value="${tg.timer_threshold||60}" class="w-full p-1.5 rounded bg-gray-700 border border-gray-600 text-xs">
 			</div>
-			<button onclick="saveSettings()" class="w-full py-2 bg-green-600 hover:bg-green-500 rounded text-sm text-white">Сохранить</button>
+			<button onclick="saveSettings()" class="w-full py-1.5 bg-green-600 hover:bg-green-500 rounded text-xs">Сохранить</button>
 		</div>
 
-		<!-- Футер -->
-		<div class="flex justify-end p-4 border-t border-gray-700">
-			<button onclick="closeModal()" class="px-4 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm text-white">Закрыть</button>
+		<div class="flex justify-end p-3 border-t border-gray-700">
+			<button onclick="closeModal()" class="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-xs">Закрыть</button>
 		</div>
 	</div>
 </div>
@@ -289,20 +287,15 @@ function openUserSettings() {
 
 			loadUsersList();
 			setupTabs();
-			document.getElementById('userSearch').focus();
 		})
 		.catch(err => {
-			console.error('Ошибка загрузки настроек:', err);
+			console.error('Ошибка открытия настроек:', err);
 			alert('Не удалось загрузить настройки.');
 		});
 }
 
 function setupTabs() {
-	const tabs = {
-		users:    'content-users',
-		telegram: 'content-telegram',
-		notify:   'content-notify'
-	};
+	const tabs = { users: 'content-users', telegram: 'content-telegram', notify: 'content-notify' };
 	Object.keys(tabs).forEach(key => {
 		document.getElementById(`tab-${key}`).onclick = () => {
 			Object.values(tabs).forEach(id => document.getElementById(id).classList.add('hidden'));
@@ -315,11 +308,11 @@ function setupTabs() {
 
 function saveSettings() {
 	const threshold = parseInt(document.getElementById('timerThreshold').value);
-	if (isNaN(threshold) || threshold < 1) return alert('Порог ≥ 1 минуты');
+	if (isNaN(threshold) || threshold < 1) return alert('Порог ≥ 1');
 	const data = new URLSearchParams({
 		action: 'save_telegram_settings',
 		bot_token: document.getElementById('tgToken').value,
-		chat_id:   document.getElementById('tgChat').value,
+		chat_id: document.getElementById('tgChat').value,
 		timer_threshold: threshold
 	});
 	fetch('api.php', { method: 'POST', body: data })
@@ -347,27 +340,26 @@ function addUser() {
 	fetch('api.php', { method: 'POST', body: data }).then(() => location.reload());
 }
 
-// === Пользователи: редактирование, удаление ===
 function editUser(username) {
 	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_user', username }) })
 		.then(r => r.json())
 		.then(u => {
 			openModal(`
-				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">Close</button>
-				<h2 class='text-xl mb-4 font-semibold text-center'>Редактировать пользователя</h2>
-				<label class='block mb-1 text-sm text-gray-400'>Логин:</label>
-				<input id='editUser' value='${u.username}' class='w-full mb-3 p-2 rounded bg-gray-600' readonly>
-				<label class='block mb-1 text-sm text-gray-400'>Имя:</label>
-				<input id='editName' value='${u.name || ''}' class='w-full mb-3 p-2 rounded bg-gray-700'>
-				<label class='block mb-1 text-sm text-gray-400'>Новый пароль:</label>
-				<input id='editPass' type='password' class='w-full mb-3 p-2 rounded bg-gray-700'>
-				<div class='flex items-center gap-2 mb-3'>
-					<input id='editIsAdmin' type='checkbox' ${u.is_admin ? 'checked' : ''}>
-					<label class='text-sm'>Администратор</label>
+				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">X</button>
+				<h2 class="text-lg font-semibold mb-3">Редактировать</h2>
+				<label class="block text-xs text-gray-400 mb-1">Логин</label>
+				<input id="editUser" value="${u.username}" class="w-full p-1.5 mb-2 rounded bg-gray-700 text-xs" readonly>
+				<label class="block text-xs text-gray-400 mb-1">Имя</label>
+				<input id="editName" value="${u.name || ''}" class="w-full p-1.5 mb-2 rounded bg-gray-700 text-xs">
+				<label class="block text-xs text-gray-400 mb-1">Пароль</label>
+				<input id="editPass" type="password" class="w-full p-1.5 mb-3 rounded bg-gray-700 text-xs">
+				<div class="flex items-center gap-1 mb-3">
+					<input id="editIsAdmin" type="checkbox" ${u.is_admin ? 'checked' : ''}>
+					<label class="text-xs">Админ</label>
 				</div>
-				<div class='flex gap-2'>
-					<button onclick='updateUser("${u.username}")' class='flex-1 bg-blue-600 hover:bg-blue-500 p-2 rounded'>Сохранить</button>
-					<button onclick='closeModal()' class='flex-1 bg-gray-600 hover:bg-gray-500 p-2 rounded'>Отмена</button>
+				<div class="flex gap-1">
+					<button onclick='updateUser("${u.username}")' class="flex-1 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs">Сохранить</button>
+					<button onclick="closeModal()" class="flex-1 py-1.5 bg-gray-600 hover:bg-gray-500 rounded text-xs">Отмена</button>
 				</div>
 			`);
 		});
