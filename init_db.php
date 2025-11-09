@@ -1,6 +1,11 @@
 <?php
 date_default_timezone_set('Europe/Moscow');
-$db = new SQLite3(__DIR__ . '/data/db.sqlite');  // <-- Изменено: добавлен /data/
+$db_path = __DIR__ . '/data/db.sqlite';
+$db = new SQLite3($db_path);
+if (!$db) {
+	die("Ошибка: Не удалось открыть БД по пути: $db_path\n");
+}
+echo "БД открыта успешно.\n";  // Для логов
 
 function ensureColumn($table, $column, $definition) {
 	global $db;
