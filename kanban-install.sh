@@ -202,8 +202,7 @@ echo ""
 # Получаем IP-адрес хоста
 HOST_IP=$(hostname -I | awk '{print $1}')
 
-echo "Адрес панели: https://${HOST_IP}/"усрщ @Flhtc gfytkb% реезыЖ//%ХРЩЫЕ_ШЗЪ/Э
-
+echo "Адрес панели: https://${HOST_IP}/"
 echo ""
 echo "Перелогиньтесь в консоли и введите команду kanban для доступа к скрипту."
 echo ""

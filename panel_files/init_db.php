@@ -1,6 +1,6 @@
 <?php
 date_default_timezone_set('Europe/Moscow');
-$db = new SQLite3(__DIR__ . '/db.sqlite');
+$db = new SQLite3(__DIR__ . '/data/db.sqlite');
 
 function ensureColumn($table, $column, $definition) {
 	global $db;
