@@ -1,4 +1,4 @@
-name: Ads Panel Docker Builder
+name: Kanban Panel Docker Builder
 
 on:
   workflow_dispatch:

@@ -3,7 +3,7 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 session_start();
-$db = new SQLite3(__DIR__ . '/data/db.sqlite');
+$db = new SQLite3('/data/db.sqlite');
 
 $first_user = false;
 $error = '';
