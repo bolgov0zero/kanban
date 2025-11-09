@@ -9,8 +9,9 @@ RUN apt-get update && \
     docker-php-ext-install pdo_sqlite && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
-# Копируем приложение
+# Копируем приложение (для последующего копирования в финальный образ)
 COPY ./panel_files /var/www/html
+COPY version.json /var/www/html
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
@@ -27,20 +28,20 @@ COPY --from=builder /usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libsqlite3-0 \
+        supervisor \
         ca-certificates \
         openssl && \
     \
     # Создаём директории
-    mkdir -p /data /etc/apache2/ssl /var/log && \
-    chown -R www-data:www-data /data /etc/apache2/ssl /var/log && \
-    chmod -R 775 /data /var/log && \
-    chmod 700 /etc/apache2/ssl && \
+    mkdir -p /opt/kanban /data /etc/apache2/ssl /var/log && \
+    chown -R www-data:www-data /opt/kanban /data /etc/apache2/ssl /var/log && \
+    chmod -R 775 /opt/kanban /data /var/log && \
     \
     # Генерируем SSL-сертификат
     openssl req -x509 -nodes -days 7300 -newkey rsa:2048 \
         -keyout /etc/apache2/ssl/server.key \
         -out /etc/apache2/ssl/server.crt \
-        -subj "/C=RU/ST=Moscow/L=Moscow/O=Kanban Project/CN=localhost" && \
+        -subj "/C=RU/ST=Moscow/L=Moscow/O=iDisk Project/CN=Kanban Panel" && \
     chmod 600 /etc/apache2/ssl/server.key && \
     chmod 644 /etc/apache2/ssl/server.crt && \
     \
@@ -49,9 +50,20 @@ RUN apt-get update && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
 
-# Настраиваем Apache и PHP
+# Настраиваем Apache и PHP (всё в одном RUN)
 RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
     a2enmod rewrite ssl && \
+    \
+    # files.conf
+    { \
+        echo "Alias /files /opt/kanban"; \
+        echo "<Directory /opt/kanban>"; \
+        echo "    Options Indexes FollowSymLinks"; \
+        echo "    AllowOverride All"; \
+        echo "    Require all granted"; \
+        echo "</Directory>"; \
+    } > /etc/apache2/conf-available/files.conf && \
+    a2enconf files && \
     \
     # default-ssl.conf (HTTPS)
     { \
