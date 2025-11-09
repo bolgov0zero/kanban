@@ -1,6 +1,5 @@
 # === СТАДИЯ СБОРКИ (только для PHP-расширений) ===
 FROM php:8.1-apache-bullseye AS builder
-
 # Устанавливаем dev-зависимости и расширения
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -8,7 +7,6 @@ RUN apt-get update && \
         ca-certificates && \
     docker-php-ext-install pdo_sqlite && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
-
 # Копируем приложение (для последующего копирования в финальный образ)
 COPY ./panel_files /var/www/html
 COPY version.json /var/www/html
@@ -17,7 +15,6 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # === ФИНАЛЬНЫЙ ОБРАЗ (минимальный) ===
 FROM php:8.1-apache-bullseye
-
 # Копируем PHP-расширения и приложение
 COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 COPY --from=builder /usr/local/etc/php/ /usr/local/etc/php/
@@ -28,8 +25,6 @@ COPY --from=builder /usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libsqlite3-0 \
-        ffmpeg \
-        imagemagick \
         supervisor \
         ca-certificates \
         openssl && \
@@ -39,7 +34,8 @@ RUN apt-get update && \
     chown -R www-data:www-data /opt/ads /opt/ads/thumbnails /data /etc/apache2/ssl /var/log && \
     chmod -R 775 /opt/ads /opt/ads/thumbnails /data /var/log && \
     \
-    # === Добавлено: Подготовка /data для БД ===
+    # === Добавлено: Подготовка /data для БД (исправлено: touch перед chown) ===
+    touch /data/db.sqlite && \
     chown www-data:www-data /data/db.sqlite && \
     chmod 664 /data/db.sqlite && \
     \
