@@ -3,7 +3,7 @@ date_default_timezone_set('Europe/Moscow');
 session_start();
 if (!isset($_SESSION['user'])) { header('Location: auth.php'); exit; }
 
-$db = new SQLite3(__DIR__ . '/db.sqlite');
+$db = new SQLite3(__DIR__ . '/data/db.sqlite');
 $user = $_SESSION['user'];
 $isAdmin = $_SESSION['is_admin'] ?? 0;
 

@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # Создаём директорию для логов, если её нет
 mkdir -p /var/log
 chown www-data:www-data /var/log
@@ -21,14 +20,12 @@ chmod 644 /etc/apache2/ssl/server.crt
 
 # Устанавливаем supervisord для управления фоновыми процессами
 mkdir -p /etc/supervisor/conf.d
-
 # Создаём конфигурацию для supervisord
 cat > /etc/supervisor/conf.d/client-monitor.conf <<EOF
 [supervisord]
 nodaemon=true
 logfile=/var/log/supervisord.log
 pidfile=/var/run/supervisord.pid
-
 [program:client-monitor]
 command=php /var/www/html/client_monitor.php
 autostart=true
@@ -42,6 +39,14 @@ echo "Запуск init_db.php..." >> /var/log/init_db.log
 php /var/www/html/init_db.php >> /var/log/init_db.log 2>&1
 if [ $? -ne 0 ]; then
     echo "Ошибка при выполнении init_db.php, смотрите /var/log/init_db.log" >&2
+fi
+
+# === Права на БД после init ===
+if [ -f /data/db.sqlite ]; then
+    chown www-data:www-data /data/db.sqlite
+    chmod 664 /data/db.sqlite
+else
+    echo "Предупреждение: /data/db.sqlite не создана (проверьте init_db.log)" >> /var/log/init_db.log
 fi
 
 # Запускаем supervisord

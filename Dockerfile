@@ -39,6 +39,11 @@ RUN apt-get update && \
     chown -R www-data:www-data /opt/ads /opt/ads/thumbnails /data /etc/apache2/ssl /var/log && \
     chmod -R 775 /opt/ads /opt/ads/thumbnails /data /var/log && \
     \
+    # === Добавлено: Подготовка /data для БД ===
+    touch /data/db.sqlite && \
+    chown www-data:www-data /data/db.sqlite && \
+    chmod 664 /data/db.sqlite && \
+    \
     # Генерируем SSL-сертификат
     openssl req -x509 -nodes -days 7300 -newkey rsa:2048 \
         -keyout /etc/apache2/ssl/server.key \
