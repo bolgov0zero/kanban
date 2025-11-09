@@ -30,6 +30,13 @@ while ($u = $resUsers->fetchArray(SQLITE3_ASSOC)) {
 }
 $user_name = $userNames[$user] ?? $user; // Имя текущего пользователя
 $columns = $db->query("SELECT * FROM columns");
+
+// Чтение версии из version.json
+$versionData = [];
+if (file_exists('version.json')) {
+	$versionData = json_decode(file_get_contents('version.json'), true);
+}
+$version = $versionData['version'] ?? 'unknown';
 ?>
 <!DOCTYPE html>
 <html lang="ru" class="dark">
@@ -137,22 +144,10 @@ $columns = $db->query("SELECT * FROM columns");
 </div>
 </main>
 <footer class="footer mt-auto bg-gray-800 text-gray-400 text-center py-4 text-sm rounded-t-lg rounded-b-lg">
-	2025 © bolgov0zero | Версия: <span id="appVersion">Загрузка...</span>
+	2025 © bolgov0zero | Версия: <?= htmlspecialchars($version) ?>
 </footer>
 <script>
 var isAdmin = <?= $isAdmin ? 'true' : 'false' ?>;
-
-async function loadVersion() {
-	try {
-		const response = await fetch('version.json');
-		if (!response.ok) throw new Error('Не удалось загрузить данные версии');
-		const data = await response.json();
-		document.getElementById('appVersion').textContent = data.version;
-	} catch (err) {
-		console.error('Ошибка загрузки версии:', err);
-		document.getElementById('appVersion').textContent = 'Неизвестно';
-	}
-}
 
 // Функция для парсинга даты из Moscow timezone (UTC+3)
 function parseMoscowDate(dateStr) {
