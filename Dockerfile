@@ -91,8 +91,8 @@ RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
     \
     # PHP: отключение ошибок в продакшене
     { \
-        echo "display_errors = On"; \
-        echo "display_startup_errors = On"; \
+        echo "display_errors = Off"; \
+        echo "display_startup_errors = Off"; \
         echo "error_reporting = E_ALL"; \
         echo "log_errors = On"; \
         echo "error_log = /var/log/php_errors.log"; \

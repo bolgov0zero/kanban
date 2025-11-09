@@ -2,7 +2,7 @@
 date_default_timezone_set('Europe/Moscow');  // <-- Добавлено: UTC+3 (Москва)
 session_start();
 if (!isset($_SESSION['user'])) exit('auth required');
-$db = new SQLite3(__DIR__ . '/data/db.sqlite');
+$db = new SQLite3('/data/db.sqlite');
 $user = $_SESSION['user'];
 $isAdmin = $_SESSION['is_admin'] ?? 0;
 $action = $_POST['action'] ?? '';
