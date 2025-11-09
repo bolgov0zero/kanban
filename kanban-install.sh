@@ -43,7 +43,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./db_data:/data
+      - ./data:/data
 EOF
 sleep 2
 if [ $? -eq 0 ]; then
