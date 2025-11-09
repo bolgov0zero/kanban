@@ -37,13 +37,13 @@ mkdir kanban && cd kanban
 cat << EOF > docker-compose.yml
 services:
   web:
-	image: bolgov0zero/kanban-panel:latest
-	container_name: kanban-panel
-	ports:
-	  - "80:80"
-	  - "443:443"
-	volumes:
-	  - db_data:/data
+    image: bolgov0zero/kanban-panel:latest
+    container_name: kanban-panel
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - db_data:/data
 volumes:
   db_data:
 EOF
