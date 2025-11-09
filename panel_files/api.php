@@ -1,5 +1,5 @@
 <?php
-date_default_timezone_set('Europe/Moscow');  // <-- Добавлено: UTC+3 (Москва)
+date_default_timezone_set('Europe/Moscow');
 session_start();
 if (!isset($_SESSION['user'])) exit('auth required');
 $db = new SQLite3('/data/db.sqlite');
@@ -7,7 +7,7 @@ $user = $_SESSION['user'];
 $isAdmin = $_SESSION['is_admin'] ?? 0;
 $action = $_POST['action'] ?? '';
 
-// Функция отправки Telegram (обновлена на cURL для лучшей совместимости)
+// Функция отправки Telegram (cURL версия из предыдущего)
 function sendTelegram($bot_token, $chat_id, $text) {
 	if (empty($bot_token) || empty($chat_id)) {
 		error_log("Telegram: empty token or chat_id");
@@ -25,7 +25,7 @@ function sendTelegram($bot_token, $chat_id, $text) {
 	curl_setopt($ch, CURLOPT_POST, true);
 	curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post_data));
 	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Для теста; в проде true
+	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 	curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 
 	$result = curl_exec($ch);
@@ -70,7 +70,7 @@ switch ($action) {
 		if(!$isAdmin) exit('forbidden');
 		$token = trim($_POST['bot_token'] ?? '');
 		$chat = trim($_POST['chat_id'] ?? '');
-		$threshold = max(1, (int)($_POST['timer_threshold'] ?? 60)); // min 1
+		$threshold = max(1, (int)($_POST['timer_threshold'] ?? 60));
 		$stmt = $db->prepare("INSERT OR REPLACE INTO telegram_settings (id, bot_token, chat_id, timer_threshold) VALUES (1, :t, :c, :th)");
 		$stmt->bindValue(':t', $token, SQLITE3_TEXT);
 		$stmt->bindValue(':c', $chat, SQLITE3_TEXT);
@@ -86,10 +86,20 @@ switch ($action) {
 		if ($result) {
 			echo json_encode(['success' => true, 'message' => 'Отправлено!']);
 		} else {
-			echo json_encode(['success' => false, 'message' => 'Ошибка отправки. Проверьте логи сервера (/var/log/apache2/error.log или аналог). Убедитесь, что bot_token и chat_id верны.']);
+			echo json_encode(['success' => false, 'message' => 'Ошибка отправки. Проверьте логи сервера.']);
 		}
 		break;
 
+	case 'get_task':  // <-- Новое: для редактирования задачи
+		$id = (int)$_POST['id'];
+		$row = $db->querySingle("SELECT t.*, COALESCE(u.name, t.responsible) AS responsible_name FROM tasks t LEFT JOIN users u ON t.responsible = u.username WHERE t.id = $id", true);
+		if (!$row) {
+			exit('task not found');
+		}
+		echo json_encode($row, JSON_UNESCAPED_UNICODE);
+		break;
+
+	// ... (остальные cases без изменений: add_column, update_column, etc.)
 	case 'add_column':
 		if(!$isAdmin) exit('forbidden');
 		$stmt = $db->prepare("INSERT INTO columns (name, bg_color, task_color, auto_complete, timer) VALUES (:n, :b, :t, :a, :tm)");
@@ -134,14 +144,12 @@ switch ($action) {
 			$stmt->bindValue($k,$_POST[$v]);
 		$stmt->bindValue(':cr',date('Y-m-d H:i:s'));
 		$stmt->execute();
-		// Уведомление
 		if (!empty($bot_token) && !empty($chat_id)) {
 			$title = trim($_POST['title'] ?? 'Без названия');
 			$resp = trim($_POST['responsible'] ?? 'Не указан');
 			$resp_name = $db->querySingle("SELECT name FROM users WHERE username='$resp'", true)['name'] ?? $resp;
 			$text = "⚠️ <b>Новая задача</b>\n<blockquote>👤 <b>Автор:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i>\n🧑‍💻 <b>Исполнитель:</b> <i>$resp_name</i></blockquote>";
-			$result = sendTelegram($bot_token, $chat_id, $text);
-			if (!$result) error_log("Failed to send new task notification");
+			sendTelegram($bot_token, $chat_id, $text);
 		}
 		break;
 
@@ -155,54 +163,44 @@ switch ($action) {
 	case 'delete_task':
 		if(!$isAdmin) exit('forbidden');
 		$id=(int)$_POST['id'];
-		// Получаем данные задачи перед удалением
 		$task_data = $db->querySingle("SELECT title, responsible FROM tasks WHERE id=$id", true);
 		$db->exec("DELETE FROM tasks WHERE id=$id");
-		// Уведомление (если нужно)
 		if (!empty($bot_token) && !empty($chat_id) && $task_data) {
 			$title = $task_data['title'] ?? 'Без названия';
 			$text = "🗑️ <b>Задача удалена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i></blockquote>";
-			$result = sendTelegram($bot_token, $chat_id, $text);
-			if (!$result) error_log("Failed to send delete task notification");
+			sendTelegram($bot_token, $chat_id, $text);
 		}
 		break;
 
 	case 'move_task':
 		$task_id = (int)$_POST['task_id'];
 		$col_id = (int)$_POST['column_id'];
-		// Обновляем колонку
 		$stmt = $db->prepare("UPDATE tasks SET column_id = :c WHERE id = :id");
 		$stmt->bindValue(':c', $col_id, SQLITE3_INTEGER);
 		$stmt->bindValue(':id', $task_id, SQLITE3_INTEGER);
 		$stmt->execute();
-		
-		// Получаем данные колонки для уведомлений
+
 		$col = $db->querySingle("SELECT * FROM columns WHERE id = $col_id", true);
 		$title = $db->querySingle("SELECT title FROM tasks WHERE id = $task_id", true)['title'] ?? 'Без названия';
 		$resp = $db->querySingle("SELECT responsible FROM tasks WHERE id = $task_id", true)['responsible'] ?? 'Не указан';
 		$resp_name = $db->querySingle("SELECT name FROM users WHERE username='$resp'", true)['name'] ?? $resp;
 		$col_name = $col['name'] ?? 'Неизвестная колонка';
-		
-		// Если колонка с таймером, обновляем moved_at в UTC и сбрасываем notified_at
+
 		if ($col['timer']) {
 			$stmt_move = $db->prepare("UPDATE tasks SET moved_at = :moved, notified_at = NULL WHERE id = :id");
-			$stmt_move->bindValue(':moved', gmdate('Y-m-d H:i:s'), SQLITE3_TEXT);  // UTC time
+			$stmt_move->bindValue(':moved', gmdate('Y-m-d H:i:s'), SQLITE3_TEXT);
 			$stmt_move->bindValue(':id', $task_id, SQLITE3_INTEGER);
 			$stmt_move->execute();
 		}
-		
-		// Уведомление о перемещении (без изменений)
+
 		if (!empty($bot_token) && !empty($chat_id)) {
 			$move_text = "➡️ <b>Задача перемещена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i>\n📂 <b>В колонку:</b> <i>$col_name</i>\n🧑‍💻 <b>Исполнитель:</b> <i>$resp_name</i></blockquote>";
-			$result = sendTelegram($bot_token, $chat_id, $move_text);
-			if (!$result) error_log("Failed to send move task notification");
+			sendTelegram($bot_token, $chat_id, $move_text);
 		}
 		
-		// Уведомление о завершении, если колонка с auto_complete (без изменений)
 		if ($col['auto_complete']) {
 			$complete_text = "✅ <b>Задача завершена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i></blockquote>";
 			sendTelegram($bot_token, $chat_id, $complete_text);
-			// Устанавливаем completed=1
 			$db->exec("UPDATE tasks SET completed = 1 WHERE id = $task_id");
 		}
 		break;
@@ -219,13 +217,10 @@ switch ($action) {
 			$stmt->bindValue(':a',date('Y-m-d H:i:s'));
 			$stmt->execute();
 			$db->exec("DELETE FROM tasks WHERE id=$id");
-			// Уведомление (обновлено на имя)
 			if (!empty($bot_token) && !empty($chat_id)) {
 				$title = $row['title'] ?? 'Без названия';
-				$resp_name = $row['responsible_name'] ?? 'Не указан';
 				$text = "📦 <b>Задача заархивирована</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i></blockquote>";
-				$result = sendTelegram($bot_token, $chat_id, $text);
-				if (!$result) error_log("Failed to send archive notification");
+				sendTelegram($bot_token, $chat_id, $text);
 			}
 		} 
 		break;
@@ -244,19 +239,17 @@ switch ($action) {
 				VALUES (:t,:d,:r,:dl,:i,:c,:cr)");
 			foreach([':t'=>'title',':d'=>'description',':r'=>'responsible',':dl'=>'deadline',':i'=>'importance'] as $k=>$v)
 				$stmt->bindValue($k,$row[$v]);
-			$stmt->bindValue(':c',1); // возвращаем в первую колонку
+			$stmt->bindValue(':c',1);
 			$stmt->bindValue(':cr',date('Y-m-d H:i:s'));
 			$stmt->execute();
 			$db->exec("DELETE FROM archive WHERE id=$id");
-			// Уведомление о восстановлении
 			if (!empty($bot_token) && !empty($chat_id)) {
 				$title = $row['title'] ?? 'Без названия';
 				$resp = $row['responsible'] ?? 'Не указан';
 				$resp_name = $db->querySingle("SELECT name FROM users WHERE username='$resp'", true)['name'] ?? $resp;
 				$first_col = $db->querySingle("SELECT name FROM columns WHERE id=1", true)['name'] ?? 'Первая колонка';
 				$text = "🔄 <b>Задача восстановлена из архива</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i>\n📂 <b>В колонку:</b> <i>$first_col</i>\n🧑‍💻 <b>Исполнитель:</b> <i>$resp_name</i></blockquote>";
-				$result = sendTelegram($bot_token, $chat_id, $text);
-				if (!$result) error_log("Failed to send restore notification");
+				sendTelegram($bot_token, $chat_id, $text);
 			}
 		} break;
 

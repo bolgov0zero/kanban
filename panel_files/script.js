@@ -39,10 +39,10 @@ function getContrastColor(hex) {
 function saveColumn() {
 	let data = new URLSearchParams({
 		action: 'add_column',
-		name: colName.value,
-		bg_color: colBg.value,
-		task_color: taskBg.value,
-		auto_complete: autoComplete.checked ? 1 : 0,
+		name: document.getElementById('colName').value,
+		bg_color: document.getElementById('colBg').value,
+		task_color: document.getElementById('taskBg').value,
+		auto_complete: document.getElementById('autoComplete').checked ? 1 : 0,
 		timer: document.getElementById('timer').checked ? 1 : 0
 	});
 	fetch('api.php', { method: 'POST', body: data }).then(() => location.reload());
@@ -52,10 +52,10 @@ function updateColumn(id) {
 	let data = new URLSearchParams({
 		action: 'update_column',
 		id,
-		name: colName.value,
-		bg_color: colBg.value,
-		task_color: taskBg.value,
-		auto_complete: autoComplete.checked ? 1 : 0,
+		name: document.getElementById('colName').value,
+		bg_color: document.getElementById('colBg').value,
+		task_color: document.getElementById('taskBg').value,
+		auto_complete: document.getElementById('autoComplete').checked ? 1 : 0,
 		timer: document.getElementById('timer').checked ? 1 : 0
 	});
 	fetch('api.php', { method: 'POST', body: data }).then(() => location.reload());
@@ -105,12 +105,12 @@ function loadUsers() {
 function saveTask() {
 	let data = new URLSearchParams({
 		action: 'add_task',
-		title: title.value,
-		description: desc.value,
-		responsible: resp.value,
-		deadline: deadline.value,
-		importance: imp.value,
-		column_id: col.value
+		title: document.getElementById('title').value,
+		description: document.getElementById('desc').value,
+		responsible: document.getElementById('resp').value,
+		deadline: document.getElementById('deadline').value,
+		importance: document.getElementById('imp').value,
+		column_id: document.getElementById('col').value
 	});
 	fetch('api.php', { method: 'POST', body: data }).then(() => location.reload());
 }
@@ -118,11 +118,11 @@ function updateTask(id) {
 	let data = new URLSearchParams({
 		action: 'update_task',
 		id,
-		title: title.value,
-		description: desc.value,
-		responsible: resp.value,
-		deadline: deadline.value,
-		importance: imp.value
+		title: document.getElementById('title').value,
+		description: document.getElementById('desc').value,
+		responsible: document.getElementById('resp').value,
+		deadline: document.getElementById('deadline').value,
+		importance: document.getElementById('imp').value
 	});
 	fetch('api.php', { method: 'POST', body: data }).then(() => location.reload());
 }
@@ -139,12 +139,11 @@ function editTask(id) {
 		.then(r => r.json())
 		.then(t => {
 			let respOptions = users.map(u => `<option value='${u.username}' ${t.responsible === u.username ? 'selected' : ''}>${u.name || u.username}</option>`).join('');
-			let colOptions = ''; // Загрузить колонки динамически, если нужно
 			openModal(`
 				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
 				<h2 class='text-xl mb-4 font-semibold text-center'>Редактировать задачу</h2>
 				<label class='block mb-1 text-sm text-gray-400'>Заголовок:</label>
-				<input id='title' value='${t.title}' class='w-full mb-3 p-2 rounded bg-gray-700'>
+				<input id='title' value='${t.title || ''}' class='w-full mb-3 p-2 rounded bg-gray-700'>
 				<label class='block mb-1 text-sm text-gray-400'>Описание:</label>
 				<textarea id='desc' class='w-full mb-3 p-2 rounded bg-gray-700'>${t.description || ''}</textarea>
 				<label class='block mb-1 text-sm text-gray-400'>Исполнитель:</label>
@@ -162,33 +161,47 @@ function editTask(id) {
 					<button onclick='deleteTask(${id})' class='flex-1 bg-red-700 hover:bg-red-600 p-2 rounded'>Удалить</button>
 				</div>
 			`);
+		})
+		.catch(err => {
+			console.error('Ошибка редактирования задачи:', err);
+			alert('Ошибка загрузки задачи. Проверьте ID.');
 		});
 }
 
-// === Универсальная функция открытия модалки (если openModal не определена) ===
+// === Универсальная функция открытия модалки ===
 function openModal(content) {
 	document.getElementById('modal-content').innerHTML = content;
 	document.getElementById('modal-bg').classList.remove('hidden');
 }
 
-// === Настройки пользователей и Telegram ===
+// === Настройки пользователей и Telegram (новый дизайн) ===
+let usersList = []; // Для поиска
 function loadUsersList() {
 	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_users' }) })
 		.then(r => r.json())
 		.then(data => {
-			const list = document.getElementById('users-list');
-			if (!list) return;
-			list.innerHTML = data.map(u => `
-				<div class="flex justify-between items-center p-2 bg-gray-700 rounded">
-					<span>${u.username} (${u.name || ''}) ${u.is_admin ? '(Админ)' : ''}</span>
-					<div class="flex gap-1">
-						<button onclick="editUser('${u.username}')" class="text-blue-400 hover:text-blue-300">✏️</button>
-						<button onclick="deleteUser('${u.username}')" class="text-red-400 hover:text-red-300">🗑️</button>
-					</div>
-				</div>
-			`).join('');
+			usersList = data;
+			filterUsers('');  // Инициализируем список
 		})
 		.catch(err => console.error('Ошибка загрузки пользователей:', err));
+}
+
+function filterUsers(query) {
+	const list = document.getElementById('users-list');
+	if (!list) return;
+	const filtered = usersList.filter(u => u.username.toLowerCase().includes(query.toLowerCase()) || (u.name && u.name.toLowerCase().includes(query.toLowerCase())));
+	list.innerHTML = filtered.map(u => `
+		<div class="flex justify-between items-center p-3 bg-gray-700/50 rounded-md border border-gray-600">
+			<div class="flex-1">
+				<div class="font-medium">${u.username}</div>
+				<div class="text-sm text-gray-400">${u.name || ''} ${u.is_admin ? '(Админ)' : ''}</div>
+			</div>
+			<div class="flex gap-2">
+				<button onclick="editUser('${u.username}')" class="p-1 text-blue-400 hover:text-blue-300 rounded">✏️</button>
+				<button onclick="deleteUser('${u.username}')" class="p-1 text-red-400 hover:text-red-300 rounded">🗑️</button>
+			</div>
+		</div>
+	`).join('');
 }
 
 function openUserSettings() {
@@ -196,98 +209,132 @@ function openUserSettings() {
 		.then(r => r.json())
 		.then(tg => {
 			const modalHTML = `
-				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
-				<h2 class='text-xl mb-4 font-semibold text-center'>Настройки администратора</h2>
-
-				<!-- Вкладки -->
-				<div class="flex mb-4 bg-gray-700 rounded-t-lg overflow-hidden">
-					<button id="tab-users" class="flex-1 py-2 px-4 border-b-2 border-blue-500 text-blue-300 bg-gray-600 hover:bg-gray-500">👥 Пользователи</button>
-					<button id="tab-telegram" class="flex-1 py-2 px-4 border-b-2 border-transparent text-gray-400 bg-gray-800 hover:bg-gray-700">📱 Telegram</button>
-					<button id="tab-notifications" class="flex-1 py-2 px-4 border-b-2 border-transparent text-gray-400 bg-gray-800 hover:bg-gray-700">🔔 Уведомления</button>
-				</div>
-
-				<!-- Контент вкладки "Пользователи" (по умолчанию видим) -->
-				<div id="content-users" class="space-y-3 p-4 bg-gray-800 rounded-b-lg">
-					<div class="flex flex-wrap gap-2 mb-4">
-						<input id="newUser" placeholder="Новый логин" class="flex-1 min-w-[120px] p-2 rounded bg-gray-700">
-						<input id="newPass" type="password" placeholder="Пароль" class="flex-1 min-w-[120px] p-2 rounded bg-gray-700">
-						<input id="newName" placeholder="Имя" class="flex-1 min-w-[120px] p-2 rounded bg-gray-700">
-						<label class="flex items-center gap-1 p-2 bg-gray-700 rounded"><input id="newIsAdmin" type="checkbox"> Админ</label>
-						<button onclick="addUser()" class="bg-blue-600 hover:bg-blue-500 text-sm py-2 px-4 rounded whitespace-nowrap">➕ Добавить</button>
+				<div class="relative bg-gray-800 rounded-lg shadow-xl border border-gray-700 max-w-4xl max-h-[80vh] overflow-y-auto w-[min(90vw,48rem)]">
+					<button onclick="closeModal()" class="absolute z-10 right-4 top-4 text-gray-400 hover:text-white text-xl font-bold">&times;</button>
+					<h2 class="text-2xl font-bold text-center p-6 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-t-lg">Настройки администратора</h2>
+					
+					<!-- Вкладки: строгий bar -->
+					<div class="flex border-b border-gray-600 bg-gray-700">
+						<button id="tab-users" class="flex-1 py-3 px-6 text-sm font-medium text-gray-300 hover:text-white border-b-2 border-blue-500 bg-blue-50/10">👥 Пользователи</button>
+						<button id="tab-telegram" class="flex-1 py-3 px-6 text-sm font-medium text-gray-400 hover:text-gray-300 border-b-2 border-transparent">📱 Telegram</button>
+						<button id="tab-notifications" class="flex-1 py-3 px-6 text-sm font-medium text-gray-400 hover:text-gray-300 border-b-2 border-transparent">🔔 Уведомления</button>
 					</div>
-					<div id="users-list" class="space-y-2 max-h-60 overflow-y-auto">
-						<!-- Список пользователей загружается динамически -->
-					</div>
-				</div>
 
-				<!-- Контент вкладки "Telegram" (скрыт) -->
-				<div id="content-telegram" class="hidden space-y-3 p-4 bg-gray-800 rounded-b-lg">
-					<div class="grid grid-cols-1 gap-2">
-						<input id="tgToken" value="${tg.bot_token || ''}" placeholder="Bot Token" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500">
-						<input id="tgChat" value="${tg.chat_id || ''}" placeholder="Chat ID" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500">
-						<div class="flex gap-2 pt-2">
-							<button onclick="saveSettings()" class="flex-1 bg-green-600 hover:bg-green-500 text-sm py-2 rounded transition-colors">💾 Сохранить</button>
-							<button onclick="testTelegram()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-sm py-2 rounded transition-colors">🧪 Тест</button>
+					<!-- Вкладка Пользователи -->
+					<div id="content-users" class="p-6 space-y-4">
+						<div class="flex gap-2 mb-4">
+							<input id="userSearch" placeholder="Поиск по логину/имени..." class="flex-1 p-2 rounded bg-gray-700 border border-gray-600 focus:border-blue-500" oninput="filterUsers(this.value)">
+						</div>
+						<div class="flex gap-3 mb-4">
+							<input id="newUser" placeholder="Логин" class="flex-1 p-2 rounded bg-gray-700 border border-gray-600">
+							<input id="newPass" type="password" placeholder="Пароль" class="flex-1 p-2 rounded bg-gray-700 border border-gray-600">
+							<input id="newName" placeholder="Имя" class="flex-1 p-2 rounded bg-gray-700 border border-gray-600">
+							<button onclick="addUser()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-white whitespace-nowrap">➕ Добавить</button>
+						</div>
+						<div id="users-list" class="space-y-2 max-h-64 overflow-y-auto"></div>
+					</div>
+
+					<!-- Вкладка Telegram -->
+					<div id="content-telegram" class="hidden p-6 space-y-4">
+						<div class="grid grid-cols-1 gap-4">
+							<div>
+								<label class="block mb-1 text-sm font-medium text-gray-300">Bot Token</label>
+								<input id="tgToken" value="${tg.bot_token || ''}" placeholder="123456:ABC-DEF..." class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-green-500">
+							</div>
+							<div>
+								<label class="block mb-1 text-sm font-medium text-gray-300">Chat ID</label>
+								<input id="tgChat" value="${tg.chat_id || ''}" placeholder="-1001234567890" class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-green-500">
+							</div>
+							<div class="flex gap-3">
+								<button onclick="saveSettings()" class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-500 rounded text-white">💾 Сохранить</button>
+								<button onclick="testTelegram()" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-white">🧪 Тест</button>
+								<button onclick="validateToken()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-white">🔍 Проверить токен</button>
+							</div>
 						</div>
 					</div>
-				</div>
 
-				<!-- Контент вкладки "Уведомления" (скрыт) -->
-				<div id="content-notifications" class="hidden space-y-3 p-4 bg-gray-800 rounded-b-lg">
-					<div class="grid grid-cols-1 gap-2">
-						<label class="block mb-1 text-sm text-gray-400">Порог таймера (минуты): после этого времени отправлять уведомление о превышении</label>
-						<input id="timerThreshold" type="number" value="${tg.timer_threshold || 60}" min="1" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500 w-full">
-						<div class="flex gap-2 pt-2">
-							<button onclick="saveSettings()" class="flex-1 bg-green-600 hover:bg-green-500 text-sm py-2 rounded transition-colors">💾 Сохранить</button>
+					<!-- Вкладка Уведомления -->
+					<div id="content-notifications" class="hidden p-6 space-y-4">
+						<div class="grid grid-cols-1 gap-4">
+							<div>
+								<label class="block mb-1 text-sm font-medium text-gray-300">Порог таймера (минуты)</label>
+								<input id="timerThreshold" type="number" value="${tg.timer_threshold || 60}" min="1" class="w-full p-2 rounded bg-gray-700 border border-gray-600 focus:border-green-500">
+								<p class="text-xs text-gray-500 mt-1">После этого времени в колонке с таймером отправлять уведомление</p>
+							</div>
+							<button onclick="saveSettings()" class="w-full px-4 py-2 bg-green-600 hover:bg-green-500 rounded text-white">💾 Сохранить</button>
 						</div>
+					</div>
+
+					<!-- Кнопка "Сохранить все" внизу -->
+					<div class="p-6 bg-gray-900 border-t border-gray-600">
+						<button onclick="saveAllSettings()" class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-white font-medium">💾 Сохранить все изменения</button>
 					</div>
 				</div>
 			`;
 
 			document.getElementById('modal-content').innerHTML = modalHTML;
-			document.getElementById('modal-content').className = 'bg-gray-800 p-0 rounded-xl w-[42rem] max-h-[80vh] overflow-y-auto relative shadow-lg border border-gray-700 max-w-[95vw]';
+			document.getElementById('modal-content').className = 'relative';
 			document.getElementById('modal-bg').classList.remove('hidden');
 
 			// Загрузка списка пользователей
 			loadUsersList();
 
-			// Привязка onclick с улучшениями
+			// Вкладки: улучшенная логика
 			const tabs = {
-				'users': 'content-users',
-				'telegram': 'content-telegram',
-				'notifications': 'content-notifications'
+				users: 'content-users',
+				telegram: 'content-telegram',
+				notifications: 'content-notifications'
 			};
-			const tabButtons = ['tab-users', 'tab-telegram', 'tab-notifications'];
-
-			tabButtons.forEach(tabId => {
-				document.getElementById(tabId).onclick = (e) => {
-					e.preventDefault();
-					Object.keys(tabs).forEach(key => {
-						const contentId = tabs[key];
-						const buttonId = `tab-${key}`;
-						if (key === tabId.replace('tab-', '')) {
-							document.getElementById(contentId).classList.remove('hidden');
-							document.getElementById(buttonId).classList.add('border-blue-500', 'text-blue-300', 'bg-gray-600');
-							document.getElementById(buttonId).classList.remove('border-transparent', 'text-gray-400', 'bg-gray-800');
+			Object.keys(tabs).forEach(key => {
+				document.getElementById(`tab-${key}`).onclick = () => {
+					Object.keys(tabs).forEach(k => {
+						const content = document.getElementById(tabs[k]);
+						const button = document.getElementById(`tab-${k}`);
+						if (k === key) {
+							content.classList.remove('hidden');
+							button.classList.add('border-blue-500', 'text-white', 'bg-blue-50/10');
+							button.classList.remove('text-gray-400', 'border-transparent');
 						} else {
-							document.getElementById(contentId).classList.add('hidden');
-							document.getElementById(buttonId).classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-600');
-							document.getElementById(buttonId).classList.add('border-transparent', 'text-gray-400', 'bg-gray-800');
+							content.classList.add('hidden');
+							button.classList.remove('border-blue-500', 'text-white', 'bg-blue-50/10');
+							button.classList.add('text-gray-400', 'border-transparent');
 						}
 					});
 				};
 			});
+
+			// ESC для закрытия
+			document.addEventListener('keydown', function escClose(e) {
+				if (e.key === 'Escape') closeModal();
+			}, { once: true });
 		})
 		.catch(err => {
 			console.error('Ошибка открытия настроек:', err);
-			alert('Ошибка загрузки настроек. Проверьте консоль.');
+			alert('Ошибка загрузки настроек.');
 		});
+}
+
+// Новые функции для функциональности
+function validateToken() {
+	const token = document.getElementById('tgToken').value;
+	if (!token) return alert('Введите токен');
+	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'test_telegram' }) })
+		.then(r => r.json())
+		.then(res => alert(res.success ? 'Токен валиден!' : 'Ошибка: ' + res.message));
+}
+
+function saveAllSettings() {
+	saveSettings();  // Сохраняет из всех вкладок
+	closeModal();
 }
 
 function saveSettings() {
 	const tokenEl = document.getElementById('tgToken');
 	const chatEl = document.getElementById('tgChat');
 	const thresholdEl = document.getElementById('timerThreshold');
+	if (thresholdEl && parseInt(thresholdEl.value) < 1) {
+		return alert('Порог должен быть ≥1 минуты');
+	}
 	let data = new URLSearchParams({
 		action: 'save_telegram_settings',
 		bot_token: tokenEl ? tokenEl.value : '',
@@ -296,25 +343,15 @@ function saveSettings() {
 	});
 	fetch('api.php', { method: 'POST', body: data })
 		.then(r => r.json())
-		.then(res => alert(res.success ? 'Сохранено!' : 'Ошибка сохранения'))
+		.then(res => alert(res.success ? res.message : 'Ошибка: ' + res.message))
 		.catch(err => console.error('Ошибка сохранения:', err));
 }
 
 function testTelegram() {
-	let data = new URLSearchParams({ action: 'test_telegram' });
-	fetch('api.php', { method: 'POST', body: data })
+	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'test_telegram' }) })
 		.then(r => r.json())
-		.then(res => {
-			if (res.success) {
-				alert('✅ ' + res.message);
-			} else {
-				alert('❌ ' + res.message);
-			}
-		})
-		.catch(err => {
-			console.error('Ошибка теста Telegram:', err);
-			alert('Ошибка сети или сервера. Проверьте консоль.');
-		});
+		.then(res => alert(res.success ? '✅ ' + res.message : '❌ ' + res.message))
+		.catch(err => alert('Ошибка сети'));
 }
 
 // === Редактирование пользователя ===
@@ -348,7 +385,7 @@ function updateUser(username) {
 		action: 'update_user',
 		username,
 		name: document.getElementById('editName').value,
-		password: document.getElementById('editPass').value, // пустой = не менять
+		password: document.getElementById('editPass').value,
 		is_admin: document.getElementById('editIsAdmin').checked ? 1 : 0
 	});
 	fetch('api.php', { method: 'POST', body: data }).then(() => location.reload());
@@ -357,11 +394,12 @@ function updateUser(username) {
 function addUser() {
 	let data = new URLSearchParams({
 		action: 'add_user',
-		username: newUser.value,
-		password: newPass.value,
-		name: newName.value,
-		is_admin: newIsAdmin.checked ? 1 : 0
+		username: document.getElementById('newUser').value,
+		password: document.getElementById('newPass').value,
+		name: document.getElementById('newName').value,
+		is_admin: document.getElementById('newIsAdmin').checked ? 1 : 0
 	});
+	if (!data.get('username') || !data.get('password')) return alert('Логин и пароль обязательны');
 	fetch('api.php', { method: 'POST', body: data }).then(() => location.reload());
 }
 function deleteUser(name) {
