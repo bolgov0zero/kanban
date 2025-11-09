@@ -1,7 +1,6 @@
 <?php
 date_default_timezone_set('Europe/Moscow');
-$db_path = '/data/db.sqlite';  // <-- Измените на volume-путь
-$db = new SQLite3($db_path);
+$db = new SQLite3(__DIR__ . '/data/db.sqlite');  // <-- Изменено: добавлен /data/
 
 function ensureColumn($table, $column, $definition) {
 	global $db;
@@ -58,7 +57,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS archive (
 	title TEXT,
 	description TEXT,
 	responsible TEXT,
-	responsible_name TEXT,  // <-- Добавлено: имя пользователя
+	responsible_name TEXT,
 	deadline TEXT,
 	importance TEXT,
 	archived_at TEXT
