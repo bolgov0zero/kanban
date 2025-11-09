@@ -23,18 +23,18 @@ chmod 644 /etc/apache2/ssl/server.crt
 mkdir -p /etc/supervisor/conf.d
 
 # Создаём конфигурацию для supervisord
-cat > /etc/supervisor/conf.d/client-monitor.conf <<EOF
+cat > /etc/supervisor/conf.d/monitoring.conf <<EOF
 [supervisord]
 nodaemon=true
 logfile=/var/log/supervisord.log
 pidfile=/var/run/supervisord.pid
 
 [program:client-monitor]
-command=php /var/www/html/client_monitor.php
+command=php /var/www/html/monitoring.php
 autostart=true
 autorestart=true
-stderr_logfile=/var/log/client-monitor.err.log
-stdout_logfile=/var/log/client-monitor.out.log
+stderr_logfile=/var/log/monitoring.err.log
+stdout_logfile=/var/log/monitoring.out.log
 EOF
 
 # Запускаем init_db.php и логируем вывод

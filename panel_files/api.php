@@ -29,9 +29,10 @@ function sendTelegram($bot_token, $chat_id, $text) {
 }
 
 // Получаем Telegram настройки
-$tg_settings = $db->querySingle("SELECT bot_token, chat_id FROM telegram_settings WHERE id=1", true);
+$tg_settings = $db->querySingle("SELECT bot_token, chat_id, timer_threshold FROM telegram_settings WHERE id=1", true);
 $bot_token = $tg_settings['bot_token'] ?? '';
 $chat_id = $tg_settings['chat_id'] ?? '';
+$timer_threshold = $tg_settings['timer_threshold'] ?? 60;
 
 // Получаем имя текущего пользователя
 $user_name_stmt = $db->prepare("SELECT name FROM users WHERE username = :u");
@@ -41,18 +42,20 @@ $user_name = $user_name_stmt->execute()->fetchArray(SQLITE3_ASSOC)['name'] ?? $u
 switch ($action) {
 	case 'get_telegram_settings':
 		if(!$isAdmin) exit('forbidden');
-		$stmt = $db->prepare("SELECT bot_token, chat_id FROM telegram_settings WHERE id=1");
+		$stmt = $db->prepare("SELECT bot_token, chat_id, timer_threshold FROM telegram_settings WHERE id=1");
 		$res = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
-		echo json_encode($res ?: ['bot_token' => '', 'chat_id' => ''], JSON_UNESCAPED_UNICODE);
+		echo json_encode($res ?: ['bot_token' => '', 'chat_id' => '', 'timer_threshold' => 60], JSON_UNESCAPED_UNICODE);
 		break;
 
 	case 'save_telegram_settings':
 		if(!$isAdmin) exit('forbidden');
 		$token = trim($_POST['bot_token'] ?? '');
 		$chat = trim($_POST['chat_id'] ?? '');
-		$stmt = $db->prepare("INSERT OR REPLACE INTO telegram_settings (id, bot_token, chat_id) VALUES (1, :t, :c)");
+		$threshold = (int)($_POST['timer_threshold'] ?? 60);
+		$stmt = $db->prepare("INSERT OR REPLACE INTO telegram_settings (id, bot_token, chat_id, timer_threshold) VALUES (1, :t, :c, :th)");
 		$stmt->bindValue(':t', $token, SQLITE3_TEXT);
 		$stmt->bindValue(':c', $chat, SQLITE3_TEXT);
+		$stmt->bindValue(':th', $threshold, SQLITE3_INTEGER);
 		$stmt->execute();
 		echo json_encode(['success' => true]);
 		break;
@@ -61,21 +64,24 @@ switch ($action) {
 		if(!$isAdmin) exit('forbidden');
 		$text = "🔔 <b>Тестовое уведомление</b> от Kanban-доски\nДата: " . date('Y-m-d H:i:s');
 		$result = sendTelegram($bot_token, $chat_id, $text);
+		echo json_encode(['success' => $result ? 'Отправлено!' : 'Ошибка отправки']);
 		break;
 
 	case 'add_column':
-		$stmt = $db->prepare("INSERT INTO columns (name, bg_color, task_color, auto_complete, timer) VALUES (:n, :b, :t, :a, :tm)");  // <-- Добавлено timer
+		if(!$isAdmin) exit('forbidden');
+		$stmt = $db->prepare("INSERT INTO columns (name, bg_color, task_color, auto_complete, timer) VALUES (:n, :b, :t, :a, :tm)");
 		foreach([':n'=>'name', ':b'=>'bg_color', ':t'=>'task_color'] as $k => $v) $stmt->bindValue($k, $_POST[$v]);
 		$stmt->bindValue(':a', (int)($_POST['auto_complete'] ?? 0));
-		$stmt->bindValue(':tm', (int)($_POST['timer'] ?? 0));  // <-- Новое
+		$stmt->bindValue(':tm', (int)($_POST['timer'] ?? 0));
 		$stmt->execute();
 		break;
 
 	case 'update_column':
-		$stmt = $db->prepare("UPDATE columns SET name=:n, bg_color=:b, task_color=:t, auto_complete=:a, timer=:tm WHERE id=:id");  // <-- Добавлено timer
+		if(!$isAdmin) exit('forbidden');
+		$stmt = $db->prepare("UPDATE columns SET name=:n, bg_color=:b, task_color=:t, auto_complete=:a, timer=:tm WHERE id=:id");
 		foreach([':n'=>'name', ':b'=>'bg_color', ':t'=>'task_color'] as $k => $v) $stmt->bindValue($k, $_POST[$v]);
 		$stmt->bindValue(':a', (int)$_POST['auto_complete']);
-		$stmt->bindValue(':tm', (int)($_POST['timer'] ?? 0));  // <-- Новое
+		$stmt->bindValue(':tm', (int)($_POST['timer'] ?? 0));
 		$stmt->bindValue(':id', (int)$_POST['id']);
 		$stmt->execute();
 		break;
@@ -88,8 +94,9 @@ switch ($action) {
 		break;
 
 	case 'get_column':
+		if(!$isAdmin) exit('forbidden');
 		$id = (int)$_POST['id'];
-		echo json_encode($db->query("SELECT * FROM columns WHERE id=$id")->fetchArray(SQLITE3_ASSOC), JSON_UNESCAPED_UNICODE);  // Уже включает timer
+		echo json_encode($db->query("SELECT * FROM columns WHERE id=$id")->fetchArray(SQLITE3_ASSOC), JSON_UNESCAPED_UNICODE);
 		break;
 
 	case 'get_columns':
@@ -127,53 +134,51 @@ switch ($action) {
 		// Получаем данные задачи перед удалением
 		$task_data = $db->querySingle("SELECT title, responsible FROM tasks WHERE id=$id", true);
 		$db->exec("DELETE FROM tasks WHERE id=$id");
-		// Уведомление об удалении
-		if (!empty($bot_token) && !empty($chat_id)) {
+		// Уведомление (если нужно)
+		if (!empty($bot_token) && !empty($chat_id) && $task_data) {
 			$title = $task_data['title'] ?? 'Без названия';
-			$resp = $task_data['responsible'] ?? 'Не указан';
-			$resp_name = $db->querySingle("SELECT name FROM users WHERE username='$resp'", true)['name'] ?? $resp;
-			$text = "🚫 <b>Задача удалена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i></blockquote>";
+			$text = "🗑️ <b>Задача удалена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i></blockquote>";
 			sendTelegram($bot_token, $chat_id, $text);
 		}
 		break;
 
-	case 'get_task':
-		$id=(int)$_POST['id'];
-		echo json_encode($db->query("SELECT * FROM tasks WHERE id=$id")->fetchArray(SQLITE3_ASSOC),JSON_UNESCAPED_UNICODE);
-		break;
-
 	case 'move_task':
-		$tid = (int)$_POST['task_id'];
-		$cid = (int)$_POST['column_id'];
-		$col = $db->querySingle("SELECT auto_complete, timer, name FROM columns WHERE id=$cid", true);
-		$completed = $col['auto_complete'] ? 1 : 0;
-		$moved_at = $col['timer'] ? date('Y-m-d H:i:s') : null;
-		$sql = "UPDATE tasks SET column_id=$cid, completed=$completed";
-		if ($moved_at) $sql .= ", moved_at='$moved_at'";
-		$sql .= " WHERE id=$tid";
-		$db->exec($sql);
-		
-		// Получаем данные задачи для уведомлений
-		$task_data = $db->querySingle("SELECT title, responsible FROM tasks WHERE id=$tid", true);
-		$title = $task_data['title'] ?? 'Без названия';
-		$col_name = $col['name'] ?? 'Неизвестная колонка';
-		$resp = $task_data['responsible'] ?? 'Не указан';
+		$task_id = (int)$_POST['task_id'];
+		$col_id = (int)$_POST['column_id'];
+		// Обновляем колонку
+		$stmt = $db->prepare("UPDATE tasks SET column_id = :c WHERE id = :id");
+		$stmt->bindValue(':c', $col_id, SQLITE3_INTEGER);
+		$stmt->bindValue(':id', $task_id, SQLITE3_INTEGER);
+		$stmt->execute();
+
+		// Получаем данные колонки для уведомлений
+		$col = $db->querySingle("SELECT * FROM columns WHERE id = $col_id", true);
+		$title = $db->querySingle("SELECT title FROM tasks WHERE id = $task_id", true)['title'] ?? 'Без названия';
+		$resp = $db->querySingle("SELECT responsible FROM tasks WHERE id = $task_id", true)['responsible'] ?? 'Не указан';
 		$resp_name = $db->querySingle("SELECT name FROM users WHERE username='$resp'", true)['name'] ?? $resp;
-		
-		// Уведомление о перемещении, только если НЕ авто-завершение
-		if (!$col['auto_complete']) {
-			$move_text = "🔄 <b>Задача перемещена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i>\n📂 <b>В колонку:</b> <i>$col_name</i>\n🧑‍💻 <b>Исполнитель:</b> <i>$resp_name</i></blockquote>";
-			if (!empty($bot_token) && !empty($chat_id)) {
-				sendTelegram($bot_token, $chat_id, $move_text);
-			}
+		$col_name = $col['name'] ?? 'Неизвестная колонка';
+
+		// Если колонка с таймером, обновляем moved_at
+		if ($col['timer']) {
+			$stmt_move = $db->prepare("UPDATE tasks SET moved_at = datetime('now') WHERE id = :id");
+			$stmt_move->bindValue(':id', $task_id, SQLITE3_INTEGER);
+			$stmt_move->execute();
+			// Сбрасываем notified_at при новом перемещении
+			$db->exec("UPDATE tasks SET notified_at = NULL WHERE id = $task_id");
+		}
+
+		// Уведомление о перемещении
+		if (!empty($bot_token) && !empty($chat_id)) {
+			$move_text = "➡️ <b>Задача перемещена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i>\n📂 <b>В колонку:</b> <i>$col_name</i>\n🧑‍💻 <b>Исполнитель:</b> <i>$resp_name</i></blockquote>";
+			sendTelegram($bot_token, $chat_id, $move_text);
 		}
 		
 		// Уведомление о завершении, если колонка с auto_complete
 		if ($col['auto_complete']) {
 			$complete_text = "✅ <b>Задача завершена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i></blockquote>";
-			if (!empty($bot_token) && !empty($chat_id)) {
-				sendTelegram($bot_token, $chat_id, $complete_text);
-			}
+			sendTelegram($bot_token, $chat_id, $complete_text);
+			// Устанавливаем completed=1
+			$db->exec("UPDATE tasks SET completed = 1 WHERE id = $task_id");
 		}
 		break;
 

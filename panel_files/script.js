@@ -243,117 +243,114 @@ function closeModal() { document.getElementById('modal-bg').classList.add('hidde
 
 // === Открытие модального окна настроек (улучшенная версия) ===
 function openUserSettings() {
-	// Загружаем пользователей
-	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_users' }) })
+	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_telegram_settings' }) })
 		.then(r => r.json())
-		.then(users => {
-			// Генерируем список пользователей с улучшенным видом
-			let userList = users.map(u => {
-				const adminIcon = u.is_admin ? '👑' : '👤';
-				const delBtn = u.username !== 'user1' ? 
-					`<button class="text-red-400 hover:text-red-300 text-sm px-2 py-1 rounded transition-colors" onclick="deleteUser('${u.username}')">Удалить</button>` : '';
-				return `
-					<div class="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg mb-2 hover:bg-gray-700 transition-colors">
-						<div class="flex items-center gap-2">
-							<span class="text-lg">${adminIcon}</span>
-							<div>
-								<p class="font-medium text-gray-100">${u.name || u.username}</p>
-								<p class="text-xs text-gray-400">${u.username}</p>
-							</div>
-						</div>
-						<div class="flex gap-1">
-							<button class="text-blue-400 hover:text-blue-300 text-sm px-2 py-1 rounded transition-colors" onclick="editUser('${u.username}')">Редактировать</button>
-							${delBtn}
+		.then(tg => {
+			const modalHTML = `
+				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
+				<h2 class='text-xl mb-4 font-semibold text-center'>Настройки администратора</h2>
+
+				<!-- Вкладки -->
+				<div class="flex mb-4">
+					<button id="tab-users" class="flex-1 py-2 px-4 border-b-2 border-transparent text-gray-400 bg-gray-800/50 hover:bg-gray-700/50">👥 Пользователи</button>
+					<button id="tab-telegram" class="flex-1 py-2 px-4 border-b-2 border-transparent text-gray-400 bg-gray-800/50 hover:bg-gray-700/50">📱 Telegram</button>
+					<button id="tab-notifications" class="flex-1 py-2 px-4 border-b-2 border-transparent text-gray-400 bg-gray-800/50 hover:bg-gray-700/50">🔔 Уведомления</button>
+				</div>
+
+				<!-- Контент вкладки "Пользователи" -->
+				<div id="content-users" class="space-y-3">
+					<div class="flex gap-2 mb-4">
+						<input id="newUser" placeholder="Новый логин" class="flex-1 p-2 rounded bg-gray-700">
+						<input id="newPass" type="password" placeholder="Пароль" class="flex-1 p-2 rounded bg-gray-700">
+						<input id="newName" placeholder="Имя" class="flex-1 p-2 rounded bg-gray-700">
+						<label class="flex items-center gap-1"><input id="newIsAdmin" type="checkbox"> Админ</label>
+						<button onclick="addUser()" class="bg-blue-600 hover:bg-blue-500 text-sm py-2 px-4 rounded">➕ Добавить</button>
+					</div>
+					<div id="users-list" class="space-y-2 max-h-60 overflow-y-auto">
+						<!-- Список пользователей загружается динамически -->
+					</div>
+				</div>
+
+				<!-- Контент вкладки "Telegram" (скрыт по умолчанию) -->
+				<div id="content-telegram" class="hidden space-y-3">
+					<div class="grid grid-cols-1 gap-2 p-3 bg-gray-700/30 rounded-lg">
+						<input id="tgToken" value="${tg.bot_token || ''}" placeholder="Bot Token" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500">
+						<input id="tgChat" value="${tg.chat_id || ''}" placeholder="Chat ID" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500">
+						<div class="flex gap-2 pt-2">
+							<button onclick="saveSettings()" class="flex-1 bg-green-600 hover:bg-green-500 text-sm py-2 rounded transition-colors">💾 Сохранить</button>
+							<button onclick="testTelegram()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-sm py-2 rounded transition-colors">🧪 Тест</button>
 						</div>
 					</div>
-				`;
-			}).join('');
+				</div>
 
-			// Загружаем Telegram настройки
-			fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_telegram_settings' }) })
-				.then(r => r.json())
-				.then(tg => {
-					// HTML с вкладками для компактности
-					const modalHTML = `
-						<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg transition-colors">✖</button>
-						
-						<div class="flex items-center justify-between mb-4">
-							<h2 class="text-xl font-semibold">⚙️ Настройки</h2>
+				<!-- Контент вкладки "Уведомления" (скрыт по умолчанию) -->
+				<div id="content-notifications" class="hidden space-y-3">
+					<div class="grid grid-cols-1 gap-2 p-3 bg-gray-700/30 rounded-lg">
+						<label class="block mb-1 text-sm text-gray-400">Порог таймера (минуты): после этого времени отправлять уведомление о превышении</label>
+						<input id="timerThreshold" type="number" value="${tg.timer_threshold || 60}" min="1" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500 w-full">
+						<div class="flex gap-2 pt-2">
+							<button onclick="saveSettings()" class="flex-1 bg-green-600 hover:bg-green-500 text-sm py-2 rounded transition-colors">💾 Сохранить</button>
 						</div>
+					</div>
+				</div>
 
-						<!-- Вкладки -->
-						<div class="flex mb-4 border-b border-gray-700">
-							<button id="tab-users" class="flex-1 py-2 px-4 text-sm font-medium border-b-2 border-blue-500 text-blue-300 bg-gray-700/50">Пользователи</button>
-							<button id="tab-telegram" class="flex-1 py-2 px-4 text-sm font-medium text-gray-400 hover:text-gray-200 bg-gray-800/50">Telegram</button>
-						</div>
+				<!-- Кнопка закрытия -->
+				<button onclick="closeModal()" class="w-full bg-gray-600 hover:bg-gray-500 text-sm py-2 rounded transition-colors mt-4">Закрыть</button>
+			`;
 
-						<!-- Контент вкладки "Пользователи" -->
-						<div id="content-users" class="space-y-3 mb-4">
-							<div class="max-h-48 overflow-y-auto border border-gray-700 rounded-lg p-3 bg-gray-800/50">
-								${userList || '<p class="text-gray-400 text-center py-4">Нет пользователей</p>'}
-							</div>
-							
-							<!-- Компактная форма добавления -->
-							<div class="grid grid-cols-1 gap-2 p-3 bg-gray-700/30 rounded-lg">
-								<input id="newUser" placeholder="Логин" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-blue-500">
-								<input id="newName" placeholder="Имя" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-blue-500">
-								<input id="newPass" type="password" placeholder="Пароль" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-blue-500">
-								<label class="flex items-center gap-2 text-xs text-gray-300">
-									<input id="newIsAdmin" type="checkbox" class="rounded">
-									Админ
-								</label>
-								<button onclick="addUser()" class="bg-blue-600 hover:bg-blue-500 text-sm py-2 rounded transition-colors">➕ Добавить</button>
-							</div>
-						</div>
+			document.getElementById('modal-content').innerHTML = modalHTML;
+			document.getElementById('modal-content').className = 'bg-gray-800 p-6 rounded-xl w-[35rem] relative shadow-lg border border-gray-700';
+			document.getElementById('modal-bg').classList.remove('hidden');
 
-						<!-- Контент вкладки "Telegram" (скрыт по умолчанию) -->
-						<div id="content-telegram" class="hidden space-y-3">
-							<div class="grid grid-cols-1 gap-2 p-3 bg-gray-700/30 rounded-lg">
-								<input id="tgToken" value="${tg.bot_token || ''}" placeholder="Bot Token" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500">
-								<input id="tgChat" value="${tg.chat_id || ''}" placeholder="Chat ID" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500">
-								<div class="flex gap-2 pt-2">
-									<button onclick="saveTelegram()" class="flex-1 bg-green-600 hover:bg-green-500 text-sm py-2 rounded transition-colors">💾 Сохранить</button>
-									<button onclick="testTelegram()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-sm py-2 rounded transition-colors">🧪 Тест</button>
-								</div>
-							</div>
-						</div>
+			// Загрузка списка пользователей
+			loadUsersList();
 
-						<!-- Кнопка закрытия -->
-						<button onclick="closeModal()" class="w-full bg-gray-600 hover:bg-gray-500 text-sm py-2 rounded transition-colors mt-4">Закрыть</button>
-					`;
+			// JS для переключения вкладок
+			document.getElementById('tab-users').onclick = () => {
+				document.getElementById('content-users').classList.remove('hidden');
+				document.getElementById('content-telegram').classList.add('hidden');
+				document.getElementById('content-notifications').classList.add('hidden');
+				document.getElementById('tab-users').classList.add('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+				document.getElementById('tab-users').classList.remove('text-gray-400', 'bg-gray-800/50');
+				document.getElementById('tab-telegram').classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+				document.getElementById('tab-telegram').classList.add('text-gray-400', 'bg-gray-800/50');
+				document.getElementById('tab-notifications').classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+				document.getElementById('tab-notifications').classList.add('text-gray-400', 'bg-gray-800/50');
+			};
 
-					document.getElementById('modal-content').innerHTML = modalHTML;
-					document.getElementById('modal-content').className = 'bg-gray-800 p-6 rounded-xl w-[35rem] relative shadow-lg border border-gray-700'; // Устанавливаем ширину 35rem
-					document.getElementById('modal-bg').classList.remove('hidden');
+			document.getElementById('tab-telegram').onclick = () => {
+				document.getElementById('content-users').classList.add('hidden');
+				document.getElementById('content-telegram').classList.remove('hidden');
+				document.getElementById('content-notifications').classList.add('hidden');
+				document.getElementById('tab-telegram').classList.add('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+				document.getElementById('tab-telegram').classList.remove('text-gray-400', 'bg-gray-800/50');
+				document.getElementById('tab-users').classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+				document.getElementById('tab-users').classList.add('text-gray-400', 'bg-gray-800/50');
+				document.getElementById('tab-notifications').classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+				document.getElementById('tab-notifications').classList.add('text-gray-400', 'bg-gray-800/50');
+			};
 
-					// JS для переключения вкладок
-					document.getElementById('tab-users').onclick = () => {
-						document.getElementById('content-users').classList.remove('hidden');
-						document.getElementById('content-telegram').classList.add('hidden');
-						document.getElementById('tab-users').classList.add('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
-						document.getElementById('tab-users').classList.remove('text-gray-400', 'bg-gray-800/50');
-						document.getElementById('tab-telegram').classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
-						document.getElementById('tab-telegram').classList.add('text-gray-400', 'bg-gray-800/50');
-					};
-
-					document.getElementById('tab-telegram').onclick = () => {
-						document.getElementById('content-users').classList.add('hidden');
-						document.getElementById('content-telegram').classList.remove('hidden');
-						document.getElementById('tab-telegram').classList.add('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
-						document.getElementById('tab-telegram').classList.remove('text-gray-400', 'bg-gray-800/50');
-						document.getElementById('tab-users').classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
-						document.getElementById('tab-users').classList.add('text-gray-400', 'bg-gray-800/50');
-					};
-				});
+			document.getElementById('tab-notifications').onclick = () => {
+				document.getElementById('content-users').classList.add('hidden');
+				document.getElementById('content-telegram').classList.add('hidden');
+				document.getElementById('content-notifications').classList.remove('hidden');
+				document.getElementById('tab-notifications').classList.add('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+				document.getElementById('tab-notifications').classList.remove('text-gray-400', 'bg-gray-800/50');
+				document.getElementById('tab-users').classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+				document.getElementById('tab-users').classList.add('text-gray-400', 'bg-gray-800/50');
+				document.getElementById('tab-telegram').classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+				document.getElementById('tab-telegram').classList.add('text-gray-400', 'bg-gray-800/50');
+			};
 		});
 }
 
 // === Telegram ===
-function saveTelegram() {
+function saveSettings() {
 	let data = new URLSearchParams({
 		action: 'save_telegram_settings',
-		bot_token: document.getElementById('tgToken').value,
-		chat_id: document.getElementById('tgChat').value
+		bot_token: document.getElementById('tgToken') ? document.getElementById('tgToken').value : '',
+		chat_id: document.getElementById('tgChat') ? document.getElementById('tgChat').value : '',
+		timer_threshold: document.getElementById('timerThreshold').value
 	});
 	fetch('api.php', { method: 'POST', body: data })
 		.then(r => r.json())
@@ -364,7 +361,7 @@ function testTelegram() {
 	let data = new URLSearchParams({ action: 'test_telegram' });
 	fetch('api.php', { method: 'POST', body: data })
 		.then(r => r.json())
-		.then(res => alert(res.success || res.error || 'Ошибка'));
+		.then(res => alert(res.success || 'Ошибка'));
 }
 
 // === Редактирование пользователя ===
