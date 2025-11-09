@@ -43,7 +43,7 @@ function saveColumn() {
 		bg_color: colBg.value,
 		task_color: taskBg.value,
 		auto_complete: autoComplete.checked ? 1 : 0,
-		timer: document.getElementById('timer').checked ? 1 : 0  // <-- Новое
+		timer: document.getElementById('timer').checked ? 1 : 0
 	});
 	fetch('api.php', { method: 'POST', body: data }).then(() => location.reload());
 }
@@ -56,7 +56,7 @@ function updateColumn(id) {
 		bg_color: colBg.value,
 		task_color: taskBg.value,
 		auto_complete: autoComplete.checked ? 1 : 0,
-		timer: document.getElementById('timer').checked ? 1 : 0  // <-- Новое
+		timer: document.getElementById('timer').checked ? 1 : 0
 	});
 	fetch('api.php', { method: 'POST', body: data }).then(() => location.reload());
 }
@@ -69,7 +69,7 @@ function editColumn(id) {
 	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_column', id }) })
 		.then(r => r.json())
 		.then(c => {
-			openModal(`  // <-- Используйте openModal вместо прямого innerHTML для consistency (если openModal определена)
+			openModal(`
 				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
 				<h2 class='text-xl mb-4 font-semibold text-center'>Редактировать колонку</h2>
 				<label class='block mb-1 text-sm text-gray-400'>Название:</label>
@@ -83,7 +83,7 @@ function editColumn(id) {
 					<span class='text-sm'>Автозавершать</span>
 				</label>
 				<label class='flex items-center gap-2 mb-3'>
-					<input id='timer' type='checkbox' ${c.timer == 1 ? 'checked' : ''}>  // <-- Новое
+					<input id='timer' type='checkbox' ${c.timer == 1 ? 'checked' : ''}>
 					<span class='text-sm'>Таймер (время в колонке)</span>
 				</label>
 				<div class='flex gap-2'>
