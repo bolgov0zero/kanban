@@ -1,4 +1,4 @@
-name: Ads Panel Docker Builder
+name: Kanban Panel Docker Builder
 
 on:
   workflow_dispatch:
@@ -6,8 +6,7 @@ on:
   push:
 	branches: ['main', 'dev']
 	paths:
-	  - 'panel_files/**'
-	  - 'version.json'
+	  - 'panel_files/**'\
 	  - 'Dockerfile'
 	  - 'entrypoint.sh'
 
