@@ -3,18 +3,6 @@ function allowDrop(ev) { ev.preventDefault(); }
 function drag(ev) { ev.dataTransfer.setData("text", ev.target.id); }
 function highlightDrop(el, on) { if (on) el.classList.add('drop-hover'); else el.classList.remove('drop-hover'); }
 
-async function loadVersion() {
-	try {
-		const response = await fetch('version.json');
-		if (!response.ok) throw new Error('Не удалось загрузить данные версии');
-		const data = await response.json();
-		document.getElementById('appVersion').textContent = data.version;
-	} catch (err) {
-		console.error('Ошибка загрузки версии:', err);
-		document.getElementById('appVersion').textContent = 'Неизвестно';
-	}
-}
-
 function drop(ev) {
 	ev.preventDefault();
 	let taskId = ev.dataTransfer.getData("text").replace('task', '');

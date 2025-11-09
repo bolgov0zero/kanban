@@ -142,6 +142,18 @@ $columns = $db->query("SELECT * FROM columns");
 <script>
 var isAdmin = <?= $isAdmin ? 'true' : 'false' ?>;
 
+async function loadVersion() {
+	try {
+		const response = await fetch('version.json');
+		if (!response.ok) throw new Error('Не удалось загрузить данные версии');
+		const data = await response.json();
+		document.getElementById('appVersion').textContent = data.version;
+	} catch (err) {
+		console.error('Ошибка загрузки версии:', err);
+		document.getElementById('appVersion').textContent = 'Неизвестно';
+	}
+}
+
 // Функция для парсинга даты из Moscow timezone (UTC+3)
 function parseMoscowDate(dateStr) {
   // dateStr в формате 'YYYY-MM-DD HH:MM:SS'
