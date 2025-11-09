@@ -71,13 +71,11 @@ ensureColumn('tasks', 'created_at', 'TEXT');
 ensureColumn('archive', 'responsible_name', 'TEXT');
 ensureColumn('columns', 'timer', 'INTEGER DEFAULT 0');
 ensureColumn('tasks', 'moved_at', 'TEXT');
-ensureColumn('tasks', 'notified_at', 'TEXT');  // Новое: для избежания дубликатов уведомлений
-ensureColumn('telegram_settings', 'timer_threshold', 'INTEGER DEFAULT 60');  // Новое: порог в минутах
 
 // === Начальные Telegram настройки ===
 $tg_exists = $db->querySingle("SELECT COUNT(*) FROM telegram_settings WHERE id=1");
 if ($tg_exists == 0) {
-	$stmt = $db->prepare("INSERT INTO telegram_settings (id, bot_token, chat_id, timer_threshold) VALUES (1, '', '', 60)");
+	$stmt = $db->prepare("INSERT INTO telegram_settings (id, bot_token, chat_id) VALUES (1, '', '')");
 	$stmt->execute();
 }
 
