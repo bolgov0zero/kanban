@@ -1,7 +1,6 @@
-# === СТАДИЯ СБОРКИ (только для PHP-расширений) ===
+# === СТАДИЯ СБОРКИ ===
 FROM php:8.1-apache-bullseye AS builder
 
-# Устанавливаем dev-зависимости и расширения
 RUN apt-get update && \
 	apt-get install -y --no-install-recommends \
 		libsqlite3-dev \
@@ -9,35 +8,33 @@ RUN apt-get update && \
 	docker-php-ext-install pdo_sqlite && \
 	rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
-# Копируем приложение (для последующего копирования в финальный образ)
 COPY ./panel_files /var/www/html
+COPY version.json /var/www/html
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# === ФИНАЛЬНЫЙ ОБРАЗ (минимальный) ===
+# === ФИНАЛЬНЫЙ ОБРАЗ ===
 FROM php:8.1-apache-bullseye
 
-# Копируем PHP-расширения и приложение
 COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 COPY --from=builder /usr/local/etc/php/ /usr/local/etc/php/
 COPY --from=builder /var/www/html/ /var/www/html/
 COPY --from=builder /usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint.sh
 
-# Устанавливаем runtime-пакеты
+# Runtime пакеты + su-exec
 RUN apt-get update && \
 	apt-get install -y --no-install-recommends \
 		libsqlite3-0 \
 		supervisor \
 		ca-certificates \
-		openssl && \
+		openssl \
+		su-exec && \  # <-- Для su-exec www-data
 	\
-	# Создаём директории
-	mkdir -p /data /var/log /etc/apache2/ssl && \
+	mkdir -p /data/db /var/log /etc/apache2/ssl && \
 	chown -R www-data:www-data /data /var/log /etc/apache2/ssl && \
 	chmod -R 775 /data /var/log && \
 	chmod 700 /etc/apache2/ssl && \
 	\
-	# Генерируем SSL-сертификат
 	openssl req -x509 -nodes -days 7300 -newkey rsa:2048 \
 		-keyout /etc/apache2/ssl/server.key \
 		-out /etc/apache2/ssl/server.crt \
@@ -45,16 +42,13 @@ RUN apt-get update && \
 	chmod 600 /etc/apache2/ssl/server.key && \
 	chmod 644 /etc/apache2/ssl/server.crt && \
 	\
-	# Удаляем openssl и кэш
 	apt-get remove -y openssl && \
 	apt-get autoremove -y && \
 	rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
 
-# Настраиваем Apache и PHP (всё в одном RUN)
+# Настройка Apache/PHP (без изменений)
 RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
 	a2enmod rewrite ssl && \
-	\
-	# default-ssl.conf (HTTPS)
 	{ \
 		echo "<VirtualHost *:443>"; \
 		echo "    DocumentRoot /var/www/html"; \
@@ -69,29 +63,20 @@ RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
 		echo "</VirtualHost>"; \
 	} > /etc/apache2/sites-available/default-ssl.conf && \
 	a2ensite default-ssl && \
-	\
-	# 000-default.conf (редирект HTTP → HTTPS)
 	{ \
 		echo "<VirtualHost *:80>"; \
 		echo "    ServerName localhost"; \
 		echo "    Redirect permanent / https://localhost/"; \
 		echo "</VirtualHost>"; \
 	} > /etc/apache2/sites-available/000-default.conf && \
-	\
-	# PHP: загрузка файлов (если нужно, для Kanban минимально)
 	{ \
 		echo "upload_max_filesize = 50M"; \
 		echo "post_max_size = 50M"; \
 	} > /usr/local/etc/php/conf.d/uploads.ini && \
-	\
-	# PHP: отключение ошибок в продакшене
 	{ \
 		echo "display_errors = Off"; \
 		echo "display_startup_errors = Off"; \
 	} > /usr/local/etc/php/conf.d/errors.ini
 
-# Открываем порты
 EXPOSE 80 443
-
-# Запуск
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

@@ -1,6 +1,7 @@
 <?php
 date_default_timezone_set('Europe/Moscow');
-$db = new SQLite3(__DIR__ . '/db.sqlite');
+$db_path = '/data/db.sqlite';  // <-- Измените на volume-путь
+$db = new SQLite3($db_path);
 
 function ensureColumn($table, $column, $definition) {
 	global $db;
