@@ -46,6 +46,9 @@ fi
 
 # Запускаем supervisord
 supervisord -c /etc/supervisor/supervisord.conf &
+sleep 2  # Ждём запуска
+supervisorctl start client-monitor  # Явный старт
+echo "client-monitor started" >> /var/log/supervisord.log
 
 # Запускаем Apache в foreground-режиме
 exec apache2-foreground
