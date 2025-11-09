@@ -7,8 +7,10 @@ on:
     branches: ['main', 'dev']
     paths:
       - 'panel_files/**'
+      - 'version.json'
       - 'Dockerfile'
       - 'entrypoint.sh'
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -32,14 +34,14 @@ jobs:
     needs: build-and-push
     if: always()
     steps:
-     - name: Send Telegram notification
+      - name: Send Telegram notification
         uses: up9cloud/action-notify@master
         env:
-        GITHUB_JOB_STATUS: ${{ needs.build-and-push.result }}
+          GITHUB_JOB_STATUS: ${{ needs.build-and-push.result }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_TEMPLATE_CONTENT: |
-            🐳 Публикация образа Ads Panel завершёна!
+            🐳 Публикация образа Kanban Panel завершёна!
             Статус: ${{ needs.build-and-push.result == 'success' && '✅ Успех' || needs.build-and-push.result == 'failure' && '❌ Ошибка' || '⚠️ Отмена' }}
             Коммит: ${{ github.event.head_commit.message }}
             Версия: ${{ github.ref_name == 'main' && 'latest' || 'dev' }}
