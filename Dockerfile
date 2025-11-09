@@ -28,25 +28,22 @@ RUN apt-get update && \
 		supervisor \
 		ca-certificates \
 		openssl \
-		su-exec && \  # <-- Для su-exec www-data
-	\
+		su-exec && \
 	mkdir -p /data/db /var/log /etc/apache2/ssl && \
 	chown -R www-data:www-data /data /var/log /etc/apache2/ssl && \
 	chmod -R 775 /data /var/log && \
 	chmod 700 /etc/apache2/ssl && \
-	\
 	openssl req -x509 -nodes -days 7300 -newkey rsa:2048 \
 		-keyout /etc/apache2/ssl/server.key \
 		-out /etc/apache2/ssl/server.crt \
 		-subj "/C=RU/ST=Moscow/L=Moscow/O=Kanban Project/CN=Kanban Panel" && \
 	chmod 600 /etc/apache2/ssl/server.key && \
 	chmod 644 /etc/apache2/ssl/server.crt && \
-	\
 	apt-get remove -y openssl && \
 	apt-get autoremove -y && \
 	rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
 
-# Настройка Apache/PHP (без изменений)
+# Настройка Apache/PHP
 RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
 	a2enmod rewrite ssl && \
 	{ \
