@@ -7,31 +7,51 @@ $user = $_SESSION['user'];
 $isAdmin = $_SESSION['is_admin'] ?? 0;
 $action = $_POST['action'] ?? '';
 
-// Функция отправки Telegram
+// Функция отправки Telegram (обновлена на cURL для лучшей совместимости)
 function sendTelegram($bot_token, $chat_id, $text) {
-	if (empty($bot_token) || empty($chat_id)) return false;
+	if (empty($bot_token) || empty($chat_id)) {
+		error_log("Telegram: empty token or chat_id");
+		return false;
+	}
 	$url = "https://api.telegram.org/bot{$bot_token}/sendMessage";
-	$data = [
+	$post_data = [
 		'chat_id' => $chat_id,
 		'text' => $text,
 		'parse_mode' => 'HTML'
 	];
-	$options = [
-		'http' => [
-			'header' => "Content-type: application/x-www-form-urlencoded\r\n",
-			'method' => 'POST',
-			'content' => http_build_query($data)
-		]
-	];
-	$context = stream_context_create($options);
-	$result = file_get_contents($url, false, $context);
-	return json_decode($result, true)['ok'] ?? false;
+
+	$ch = curl_init();
+	curl_setopt($ch, CURLOPT_URL, $url);
+	curl_setopt($ch, CURLOPT_POST, true);
+	curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post_data));
+	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Для теста; в проде true
+	curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+	$result = curl_exec($ch);
+	$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+	$error = curl_error($ch);
+	curl_close($ch);
+
+	if ($error) {
+		error_log("Telegram cURL error: " . $error);
+		return false;
+	}
+
+	$response = json_decode($result, true);
+	if ($http_code !== 200 || !($response['ok'] ?? false)) {
+		error_log("Telegram API error: HTTP $http_code, Response: " . print_r($response, true));
+		return false;
+	}
+
+	return true;
 }
 
 // Получаем Telegram настройки
-$tg_settings = $db->querySingle("SELECT bot_token, chat_id FROM telegram_settings WHERE id=1", true);
+$tg_settings = $db->querySingle("SELECT bot_token, chat_id, timer_threshold FROM telegram_settings WHERE id=1", true);
 $bot_token = $tg_settings['bot_token'] ?? '';
 $chat_id = $tg_settings['chat_id'] ?? '';
+$timer_threshold = $tg_settings['timer_threshold'] ?? 60;
 
 // Получаем имя текущего пользователя
 $user_name_stmt = $db->prepare("SELECT name FROM users WHERE username = :u");
@@ -41,41 +61,50 @@ $user_name = $user_name_stmt->execute()->fetchArray(SQLITE3_ASSOC)['name'] ?? $u
 switch ($action) {
 	case 'get_telegram_settings':
 		if(!$isAdmin) exit('forbidden');
-		$stmt = $db->prepare("SELECT bot_token, chat_id FROM telegram_settings WHERE id=1");
+		$stmt = $db->prepare("SELECT bot_token, chat_id, timer_threshold FROM telegram_settings WHERE id=1");
 		$res = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
-		echo json_encode($res ?: ['bot_token' => '', 'chat_id' => ''], JSON_UNESCAPED_UNICODE);
+		echo json_encode($res ?: ['bot_token' => '', 'chat_id' => '', 'timer_threshold' => 60], JSON_UNESCAPED_UNICODE);
 		break;
 
 	case 'save_telegram_settings':
 		if(!$isAdmin) exit('forbidden');
 		$token = trim($_POST['bot_token'] ?? '');
 		$chat = trim($_POST['chat_id'] ?? '');
-		$stmt = $db->prepare("INSERT OR REPLACE INTO telegram_settings (id, bot_token, chat_id) VALUES (1, :t, :c)");
+		$threshold = max(1, (int)($_POST['timer_threshold'] ?? 60)); // min 1
+		$stmt = $db->prepare("INSERT OR REPLACE INTO telegram_settings (id, bot_token, chat_id, timer_threshold) VALUES (1, :t, :c, :th)");
 		$stmt->bindValue(':t', $token, SQLITE3_TEXT);
 		$stmt->bindValue(':c', $chat, SQLITE3_TEXT);
+		$stmt->bindValue(':th', $threshold, SQLITE3_INTEGER);
 		$stmt->execute();
-		echo json_encode(['success' => true]);
+		echo json_encode(['success' => true, 'message' => 'Настройки сохранены']);
 		break;
 
 	case 'test_telegram':
 		if(!$isAdmin) exit('forbidden');
 		$text = "🔔 <b>Тестовое уведомление</b> от Kanban-доски\nДата: " . date('Y-m-d H:i:s');
 		$result = sendTelegram($bot_token, $chat_id, $text);
+		if ($result) {
+			echo json_encode(['success' => true, 'message' => 'Отправлено!']);
+		} else {
+			echo json_encode(['success' => false, 'message' => 'Ошибка отправки. Проверьте логи сервера (/var/log/apache2/error.log или аналог). Убедитесь, что bot_token и chat_id верны.']);
+		}
 		break;
 
 	case 'add_column':
-		$stmt = $db->prepare("INSERT INTO columns (name, bg_color, task_color, auto_complete, timer) VALUES (:n, :b, :t, :a, :tm)");  // <-- Добавлено timer
+		if(!$isAdmin) exit('forbidden');
+		$stmt = $db->prepare("INSERT INTO columns (name, bg_color, task_color, auto_complete, timer) VALUES (:n, :b, :t, :a, :tm)");
 		foreach([':n'=>'name', ':b'=>'bg_color', ':t'=>'task_color'] as $k => $v) $stmt->bindValue($k, $_POST[$v]);
 		$stmt->bindValue(':a', (int)($_POST['auto_complete'] ?? 0));
-		$stmt->bindValue(':tm', (int)($_POST['timer'] ?? 0));  // <-- Новое
+		$stmt->bindValue(':tm', (int)($_POST['timer'] ?? 0));
 		$stmt->execute();
 		break;
 
 	case 'update_column':
-		$stmt = $db->prepare("UPDATE columns SET name=:n, bg_color=:b, task_color=:t, auto_complete=:a, timer=:tm WHERE id=:id");  // <-- Добавлено timer
+		if(!$isAdmin) exit('forbidden');
+		$stmt = $db->prepare("UPDATE columns SET name=:n, bg_color=:b, task_color=:t, auto_complete=:a, timer=:tm WHERE id=:id");
 		foreach([':n'=>'name', ':b'=>'bg_color', ':t'=>'task_color'] as $k => $v) $stmt->bindValue($k, $_POST[$v]);
 		$stmt->bindValue(':a', (int)$_POST['auto_complete']);
-		$stmt->bindValue(':tm', (int)($_POST['timer'] ?? 0));  // <-- Новое
+		$stmt->bindValue(':tm', (int)($_POST['timer'] ?? 0));
 		$stmt->bindValue(':id', (int)$_POST['id']);
 		$stmt->execute();
 		break;
@@ -88,8 +117,9 @@ switch ($action) {
 		break;
 
 	case 'get_column':
+		if(!$isAdmin) exit('forbidden');
 		$id = (int)$_POST['id'];
-		echo json_encode($db->query("SELECT * FROM columns WHERE id=$id")->fetchArray(SQLITE3_ASSOC), JSON_UNESCAPED_UNICODE);  // Уже включает timer
+		echo json_encode($db->query("SELECT * FROM columns WHERE id=$id")->fetchArray(SQLITE3_ASSOC), JSON_UNESCAPED_UNICODE);
 		break;
 
 	case 'get_columns':
@@ -110,7 +140,8 @@ switch ($action) {
 			$resp = trim($_POST['responsible'] ?? 'Не указан');
 			$resp_name = $db->querySingle("SELECT name FROM users WHERE username='$resp'", true)['name'] ?? $resp;
 			$text = "⚠️ <b>Новая задача</b>\n<blockquote>👤 <b>Автор:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i>\n🧑‍💻 <b>Исполнитель:</b> <i>$resp_name</i></blockquote>";
-			sendTelegram($bot_token, $chat_id, $text);
+			$result = sendTelegram($bot_token, $chat_id, $text);
+			if (!$result) error_log("Failed to send new task notification");
 		}
 		break;
 
@@ -127,19 +158,13 @@ switch ($action) {
 		// Получаем данные задачи перед удалением
 		$task_data = $db->querySingle("SELECT title, responsible FROM tasks WHERE id=$id", true);
 		$db->exec("DELETE FROM tasks WHERE id=$id");
-		// Уведомление об удалении
-		if (!empty($bot_token) && !empty($chat_id)) {
+		// Уведомление (если нужно)
+		if (!empty($bot_token) && !empty($chat_id) && $task_data) {
 			$title = $task_data['title'] ?? 'Без названия';
-			$resp = $task_data['responsible'] ?? 'Не указан';
-			$resp_name = $db->querySingle("SELECT name FROM users WHERE username='$resp'", true)['name'] ?? $resp;
-			$text = "🚫 <b>Задача удалена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i></blockquote>";
-			sendTelegram($bot_token, $chat_id, $text);
+			$text = "🗑️ <b>Задача удалена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i></blockquote>";
+			$result = sendTelegram($bot_token, $chat_id, $text);
+			if (!$result) error_log("Failed to send delete task notification");
 		}
-		break;
-
-	case 'get_task':
-		$id=(int)$_POST['id'];
-		echo json_encode($db->query("SELECT * FROM tasks WHERE id=$id")->fetchArray(SQLITE3_ASSOC),JSON_UNESCAPED_UNICODE);
 		break;
 
 	case 'move_task':
@@ -199,7 +224,8 @@ switch ($action) {
 				$title = $row['title'] ?? 'Без названия';
 				$resp_name = $row['responsible_name'] ?? 'Не указан';
 				$text = "📦 <b>Задача заархивирована</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i></blockquote>";
-				sendTelegram($bot_token, $chat_id, $text);
+				$result = sendTelegram($bot_token, $chat_id, $text);
+				if (!$result) error_log("Failed to send archive notification");
 			}
 		} 
 		break;
@@ -227,9 +253,10 @@ switch ($action) {
 				$title = $row['title'] ?? 'Без названия';
 				$resp = $row['responsible'] ?? 'Не указан';
 				$resp_name = $db->querySingle("SELECT name FROM users WHERE username='$resp'", true)['name'] ?? $resp;
-				$first_col = $db->querySingle("SELECT name FROM columns WHERE id=1");
-				$text = "🔄 <b>Задача восстановлена из архива</b>\n👤 <i>Кем:</i> $user_name\n📋 <i>Задача:</i> $title\n📂 <i>В колонку:</i> $first_col\n🧑‍💻 <i>Исполнитель:</i> $resp_name";
-				sendTelegram($bot_token, $chat_id, $text);
+				$first_col = $db->querySingle("SELECT name FROM columns WHERE id=1", true)['name'] ?? 'Первая колонка';
+				$text = "🔄 <b>Задача восстановлена из архива</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i>\n📂 <b>В колонку:</b> <i>$first_col</i>\n🧑‍💻 <b>Исполнитель:</b> <i>$resp_name</i></blockquote>";
+				$result = sendTelegram($bot_token, $chat_id, $text);
+				if (!$result) error_log("Failed to send restore notification");
 			}
 		} break;
 
