@@ -32,9 +32,10 @@ RUN apt-get update && \
 		openssl && \
 	\
 	# Создаём директории
-	mkdir -p /data /var/log && \
-	chown -R www-data:www-data /data /var/log && \
+	mkdir -p /data /var/log /etc/apache2/ssl && \
+	chown -R www-data:www-data /data /var/log /etc/apache2/ssl && \
 	chmod -R 775 /data /var/log && \
+	chmod 700 /etc/apache2/ssl && \
 	\
 	# Генерируем SSL-сертификат
 	openssl req -x509 -nodes -days 7300 -newkey rsa:2048 \
