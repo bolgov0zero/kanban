@@ -149,17 +149,17 @@ $version = $versionData['version'] ?? 'unknown';
 <script>
 var isAdmin = <?= $isAdmin ? 'true' : 'false' ?>;
 
-// Функция для парсинга даты из Moscow timezone (UTC+3)
-function parseMoscowDate(dateStr) {
-  // dateStr в формате 'YYYY-MM-DD HH:MM:SS'
-  const isoStr = dateStr.replace(' ', 'T') + '+03:00';
+// Функция для парсинга даты как UTC (без TZ смещения)
+function parseUTCMovedDate(dateStr) {
+  // dateStr в формате 'YYYY-MM-DD HH:MM:SS' (UTC от сервера)
+  const isoStr = dateStr.replace(' ', 'T') + 'Z';  // Добавляем 'Z' для UTC
   return new Date(isoStr);
 }
 
-// Обновление дат создания задач (локальное время браузера)
+// Обновление дат создания задач (локальное время браузера) — без изменений
 function updateCreatedDates() {
   document.querySelectorAll('.created-date[data-created]').forEach(el => {
-	const moscowDate = parseMoscowDate(el.getAttribute('data-created'));
+	const moscowDate = parseMoscowDate(el.getAttribute('data-created'));  // Оставляем для created_at (Moscow)
 	const options = { 
 	  day: '2-digit', 
 	  month: '2-digit', 
@@ -172,7 +172,7 @@ function updateCreatedDates() {
   });
 }
 
-// Обновление дедлайнов (локальное время)
+// Обновление дедлайнов (локальное время) — без изменений
 function updateDeadlines() {
   document.querySelectorAll('.deadline-tag[data-deadline]').forEach(el => {
 	const deadlineStr = el.getAttribute('data-deadline'); // 'YYYY-MM-DD'
@@ -190,7 +190,7 @@ function updateDeadlines() {
   });
 }
 
-// Динамический таймер (elapsed time, отображение в локальном формате, но diff универсален)
+// Динамический таймер (elapsed time в UTC, без локального TZ)
 function updateTimers() {
   document.querySelectorAll('[data-timer-enabled="true"]').forEach(task => {
 	const movedAtStr = task.getAttribute('data-moved-at');
@@ -198,21 +198,27 @@ function updateTimers() {
 	const timerEl = document.getElementById('timer-' + taskId);
 	if (!timerEl || !movedAtStr) return;
 
-	const moscowMovedDate = parseMoscowDate(movedAtStr);
-	const now = new Date(); // Локальное время браузера
-	const diff = now.getTime() - moscowMovedDate.getTime(); // ms, учитывая TZ при парсинге
+	const utcMovedDate = parseUTCMovedDate(movedAtStr);  // Парсим как UTC
+	const nowMs = Date.now();  // Текущее UTC ms
+	const diffMs = nowMs - utcMovedDate.getTime();  // ms, чистая разница
 
-	const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-	const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-	const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-	const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+	const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+	const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+	const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+	const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
 
 	let timerStr = '';
 	if (days > 0) timerStr += days + 'д ';
 	timerStr += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 
-	timerEl.textContent = '⏱️ ' + timerStr;
+	timerEl.innerHTML = '⏱️ ' + timerStr;  // innerHTML для emoji
   });
+}
+
+// Функция для парсинга Moscow дат (оставляем для created_at и deadline)
+function parseMoscowDate(dateStr) {
+  const isoStr = dateStr.replace(' ', 'T') + '+03:00';
+  return new Date(isoStr);
 }
 
 // Инициализация всех обновлений при загрузке
@@ -224,8 +230,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Запуск обновления таймера каждую секунду
 setInterval(updateTimers, 1000);
-
-// Если нужно обновлять даты/дедлайны динамически (например, при reload задач), вызовите функции снова
 </script>
 <?php include 'modals.php'; ?>
 </body>

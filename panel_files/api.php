@@ -143,37 +143,42 @@ switch ($action) {
 		break;
 
 	case 'move_task':
-		$tid = (int)$_POST['task_id'];
-		$cid = (int)$_POST['column_id'];
-		$col = $db->querySingle("SELECT auto_complete, timer, name FROM columns WHERE id=$cid", true);
-		$completed = $col['auto_complete'] ? 1 : 0;
-		$moved_at = $col['timer'] ? date('Y-m-d H:i:s') : null;
-		$sql = "UPDATE tasks SET column_id=$cid, completed=$completed";
-		if ($moved_at) $sql .= ", moved_at='$moved_at'";
-		$sql .= " WHERE id=$tid";
-		$db->exec($sql);
+		$task_id = (int)$_POST['task_id'];
+		$col_id = (int)$_POST['column_id'];
+		// Обновляем колонку
+		$stmt = $db->prepare("UPDATE tasks SET column_id = :c WHERE id = :id");
+		$stmt->bindValue(':c', $col_id, SQLITE3_INTEGER);
+		$stmt->bindValue(':id', $task_id, SQLITE3_INTEGER);
+		$stmt->execute();
 		
-		// Получаем данные задачи для уведомлений
-		$task_data = $db->querySingle("SELECT title, responsible FROM tasks WHERE id=$tid", true);
-		$title = $task_data['title'] ?? 'Без названия';
-		$col_name = $col['name'] ?? 'Неизвестная колонка';
-		$resp = $task_data['responsible'] ?? 'Не указан';
+		// Получаем данные колонки для уведомлений
+		$col = $db->querySingle("SELECT * FROM columns WHERE id = $col_id", true);
+		$title = $db->querySingle("SELECT title FROM tasks WHERE id = $task_id", true)['title'] ?? 'Без названия';
+		$resp = $db->querySingle("SELECT responsible FROM tasks WHERE id = $task_id", true)['responsible'] ?? 'Не указан';
 		$resp_name = $db->querySingle("SELECT name FROM users WHERE username='$resp'", true)['name'] ?? $resp;
+		$col_name = $col['name'] ?? 'Неизвестная колонка';
 		
-		// Уведомление о перемещении, только если НЕ авто-завершение
-		if (!$col['auto_complete']) {
-			$move_text = "🔄 <b>Задача перемещена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i>\n📂 <b>В колонку:</b> <i>$col_name</i>\n🧑‍💻 <b>Исполнитель:</b> <i>$resp_name</i></blockquote>";
-			if (!empty($bot_token) && !empty($chat_id)) {
-				sendTelegram($bot_token, $chat_id, $move_text);
-			}
+		// Если колонка с таймером, обновляем moved_at в UTC и сбрасываем notified_at
+		if ($col['timer']) {
+			$stmt_move = $db->prepare("UPDATE tasks SET moved_at = :moved, notified_at = NULL WHERE id = :id");
+			$stmt_move->bindValue(':moved', gmdate('Y-m-d H:i:s'), SQLITE3_TEXT);  // UTC time
+			$stmt_move->bindValue(':id', $task_id, SQLITE3_INTEGER);
+			$stmt_move->execute();
 		}
 		
-		// Уведомление о завершении, если колонка с auto_complete
+		// Уведомление о перемещении (без изменений)
+		if (!empty($bot_token) && !empty($chat_id)) {
+			$move_text = "➡️ <b>Задача перемещена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i>\n📂 <b>В колонку:</b> <i>$col_name</i>\n🧑‍💻 <b>Исполнитель:</b> <i>$resp_name</i></blockquote>";
+			$result = sendTelegram($bot_token, $chat_id, $move_text);
+			if (!$result) error_log("Failed to send move task notification");
+		}
+		
+		// Уведомление о завершении, если колонка с auto_complete (без изменений)
 		if ($col['auto_complete']) {
 			$complete_text = "✅ <b>Задача завершена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i></blockquote>";
-			if (!empty($bot_token) && !empty($chat_id)) {
-				sendTelegram($bot_token, $chat_id, $complete_text);
-			}
+			sendTelegram($bot_token, $chat_id, $complete_text);
+			// Устанавливаем completed=1
+			$db->exec("UPDATE tasks SET completed = 1 WHERE id = $task_id");
 		}
 		break;
 
