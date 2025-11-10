@@ -144,6 +144,21 @@ switch ($action) {
 			if (!$result) error_log("Failed to send new task notification");
 		}
 		break;
+		
+	case 'get_task':
+		if (!isset($_POST['id'])) exit(json_encode(['error' => 'no id']));
+		$id = (int)$_POST['id'];
+		$stmt = $db->prepare("SELECT * FROM tasks WHERE id = :id");
+		$stmt->bindValue(':id', $id, SQLITE3_INTEGER);
+		$result = $stmt->execute();
+		$task = $result->fetchArray(SQLITE3_ASSOC);
+		if (!$task) {
+			http_response_code(404);
+			echo json_encode(['error' => 'task not found']);
+		} else {
+			echo json_encode($task, JSON_UNESCAPED_UNICODE);
+		}
+		break;
 
 	case 'update_task':
 		$stmt=$db->prepare("UPDATE tasks SET title=:t,description=:d,responsible=:r,deadline=:dl,importance=:i WHERE id=:id");
