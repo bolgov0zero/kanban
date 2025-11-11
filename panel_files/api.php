@@ -8,24 +8,45 @@ $isAdmin = $_SESSION['is_admin'] ?? 0;
 $action = $_POST['action'] ?? '';
 
 // Функция отправки Telegram
+// === УЛУЧШЕННАЯ ФУНКЦИЯ ОТПРАВКИ ===
 function sendTelegram($bot_token, $chat_id, $text) {
-	if (empty($bot_token) || empty($chat_id)) return false;
+	if (empty($bot_token) || empty($chat_id)) {
+		return ['success' => false, 'error' => 'Bot token or chat_id is empty'];
+	}
+
 	$url = "https://api.telegram.org/bot{$bot_token}/sendMessage";
 	$data = [
 		'chat_id' => $chat_id,
 		'text' => $text,
-		'parse_mode' => 'HTML'
+		'parse_mode' => 'HTML',
+		'disable_web_page_preview' => true
 	];
+
 	$options = [
 		'http' => [
 			'header' => "Content-type: application/x-www-form-urlencoded\r\n",
 			'method' => 'POST',
-			'content' => http_build_query($data)
+			'content' => http_build_query($data),
+			'timeout' => 10
 		]
 	];
+
 	$context = stream_context_create($options);
-	$result = file_get_contents($url, false, $context);
-	return json_decode($result, true)['ok'] ?? false;
+	$result = @file_get_contents($url, false, $context);
+
+	if ($result === false) {
+		return ['success' => false, 'error' => 'Failed to connect to Telegram API'];
+	}
+
+	$response = json_decode($result, true);
+
+	if (isset($response['ok']) && $response['ok'] === true) {
+		return ['success' => true];
+	} else {
+		$error = $response['description'] ?? 'Unknown error';
+		$code = $response['error_code'] ?? '???';
+		return ['success' => false, 'error' => "Telegram API error {$code}: {$error}"];
+	}
 }
 
 // Получаем Telegram настройки
@@ -58,9 +79,20 @@ switch ($action) {
 		break;
 
 	case 'test_telegram':
-		if(!$isAdmin) exit('forbidden');
-		$text = "🔔 <b>Тестовое уведомление</b> от Kanban-доски\nДата: " . date('Y-m-d H:i:s');
+		if (!$isAdmin) {
+			echo json_encode(['error' => 'Forbidden']);
+			break;
+		}
+		
+		$text = "Тестовое уведомление от Kanban-доски\nДата: " . date('Y-m-d H:i:s') . "\nПользователь: {$user_name}";
+		
 		$result = sendTelegram($bot_token, $chat_id, $text);
+		
+		if ($result['success']) {
+			echo json_encode(['success' => 'Тестовое сообщение отправлено!']);
+		} else {
+			echo json_encode(['error' => $result['error']]);
+		}
 		break;
 
 	case 'add_column':
