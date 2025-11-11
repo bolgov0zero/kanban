@@ -69,6 +69,7 @@ ensureColumn('columns', 'auto_complete', 'INTEGER DEFAULT 0');
 ensureColumn('tasks', 'completed', 'INTEGER DEFAULT 0');
 ensureColumn('tasks', 'created_at', 'TEXT');
 ensureColumn('archive', 'responsible_name', 'TEXT');
+ensureColumn('columns', 'timer', 'INTEGER DEFAULT 0');
 ensureColumn('tasks', 'moved_at', 'TEXT');
 
 // === Начальные Telegram настройки ===
