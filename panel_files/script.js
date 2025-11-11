@@ -19,55 +19,10 @@ function drop(ev) {
 
 	ev.currentTarget.classList.remove('drop-hover');
 
-	// --- КЛЮЧЕВОЕ: Устанавливаем moved_at, если колонка с таймером ---
-	const timerEnabled = ev.currentTarget.dataset.timer === '1';
-	const movedAt = timerEnabled ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null;
-
 	fetch('api.php', {
 		method: 'POST',
-		body: new URLSearchParams({ 
-			action: 'move_task', 
-			task_id: taskId, 
-			column_id: colId,
-			moved_at: movedAt
-		})
-	}).then(() => {
-		if (timerEnabled) {
-			// Обновляем атрибут и запускаем таймер сразу
-			task.setAttribute('data-moved-at', movedAt);
-			task.setAttribute('data-timer-enabled', 'true');
-			const timerEl = document.getElementById('timer-' + taskId);
-			if (timerEl) {
-				timerEl.setAttribute('data-moved-at', movedAt);
-				updateTimerForTask(taskId, movedAt);
-			}
-		}
-		location.reload();
-	});
-}
-
-function updateTimers() {
-	document.querySelectorAll('[data-timer-enabled="true"]').forEach(task => {
-		const movedAtStr = task.getAttribute('data-moved-at');
-		const taskId = task.id.replace('task', '');
-		if (!movedAtStr) return;
-
-		const utcMovedDate = parseUTCMovedDate(movedAtStr);
-		const nowMs = Date.now();
-		const diffMs = nowMs - utcMovedDate.getTime();
-
-		const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-		const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-		const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-		const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
-
-		let timerStr = '';
-		if (days > 0) timerStr += days + 'д ';
-		timerStr += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-
-		const timerEl = document.getElementById('timer-' + taskId);
-		if (timerEl) timerEl.innerHTML = timerStr;
-	});
+		body: new URLSearchParams({ action: 'move_task', task_id: taskId, column_id: colId })
+	}).then(() => location.reload());
 }
 
 function getContrastColor(hex) {
@@ -110,7 +65,34 @@ function deleteColumn(id) {
 	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'delete_column', id }) })
 		.then(() => location.reload());
 }
-
+function editColumn(id) {
+	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_column', id }) })
+		.then(r => r.json())
+		.then(c => {
+			openModal(`  // <-- Используйте openModal вместо прямого innerHTML для consistency (если openModal определена)
+				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
+				<h2 class='text-xl mb-4 font-semibold text-center'>Редактировать колонку</h2>
+				<label class='block mb-1 text-sm text-gray-400'>Название:</label>
+				<input id='colName' value='${c.name}' class='w-full mb-3 p-2 rounded bg-gray-700'>
+				<label class='block mb-1 text-sm text-gray-400'>Цвет заголовка:</label>
+				<input id='colBg' type='color' value='${c.bg_color}' class='w-full mb-3 h-10 rounded'>
+				<label class='block mb-1 text-sm text-gray-400'>Цвет задач:</label>
+				<input id='taskBg' type='color' value='${c.task_color}' class='w-full mb-3 h-10 rounded'>
+				<label class='flex items-center gap-2 mb-3'>
+					<input id='autoComplete' type='checkbox' ${c.auto_complete == 1 ? 'checked' : ''}>
+					<span class='text-sm'>Автозавершать</span>
+				</label>
+				<label class='flex items-center gap-2 mb-3'>
+					<input id='timer' type='checkbox' ${c.timer == 1 ? 'checked' : ''}>  // <-- Новое
+					<span class='text-sm'>Таймер (время в колонке)</span>
+				</label>
+				<div class='flex gap-2'>
+					<button onclick='updateColumn(${id})' class='flex-1 bg-blue-600 hover:bg-blue-500 p-2 rounded'>Сохранить</button>
+					<button onclick='deleteColumn(${id})' class='flex-1 bg-red-700 hover:bg-red-600 p-2 rounded'>Удалить</button>
+				</div>
+			`);
+		});
+}
 
 // === Задачи ===
 let users = []; // глобальный массив пользователей для select
@@ -152,6 +134,74 @@ function deleteTask(id) {
 	})
 		.then(() => location.reload());
 }
+function editTask(id) {
+	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_task', id }) })
+		.then(r => r.json())
+		.then(t => {
+			let respOptions = users.map(u => `<option value='${u.username}' ${t.responsible === u.username ? 'selected' : ''}>${u.name}</option>`).join('');
+			openModal(`
+				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
+				<h2 class='text-xl mb-4 font-semibold text-center'>Редактировать задачу</h2>
+				<label class='block mb-1 text-sm text-gray-400'>Заголовок:</label>
+				<input id='title' value='${t.title}' class='w-full mb-3 p-2 rounded bg-gray-700'>
+				<label class='block mb-1 text-sm text-gray-400'>Описание:</label>
+				<textarea id='desc' class='w-full mb-3 p-2 rounded bg-gray-700'>${t.description}</textarea>
+				<label class='block mb-1 text-sm text-gray-400'>Исполнитель:</label>
+				<select id='resp' class='w-full mb-3 p-2 rounded bg-gray-700'>${respOptions}</select>
+				<label class='block mb-1 text-sm text-gray-400'>Срок:</label>
+				<input id='deadline' type='date' value='${t.deadline}' class='w-full mb-3 p-2 rounded bg-gray-700'>
+				<label class='block mb-1 text-sm text-gray-400'>Важность:</label>
+				<select id='imp' class='w-full mb-3 p-2 rounded bg-gray-700'>
+					<option ${t.importance==='не срочно'?'selected':''}>не срочно</option>
+					<option ${t.importance==='средне'?'selected':''}>средне</option>
+					<option ${t.importance==='срочно'?'selected':''}>срочно</option>
+				</select>
+				<div class='flex gap-2'>
+					<button onclick='updateTask(${id})' class='flex-1 bg-blue-600 hover:bg-blue-500 p-2 rounded'>Сохранить</button>
+					<button onclick='deleteTask(${id})' class='flex-1 bg-red-700 hover:bg-red-600 p-2 rounded'>Удалить</button>
+				</div>
+			`);
+		});
+}
+
+// === Модалка архива ===
+function openArchive() {
+	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_archive' }) })
+		.then(r => r.json())
+		.then(d => {
+			let html = `
+				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
+				<h2 class='text-xl mb-4 font-semibold text-center'>Архивные задачи</h2>`;
+			if (!d.length) html += `<p class='text-gray-400 text-center'>Архив пуст</p>`;
+			else for (let t of d) {
+				html += `
+				<div class='bg-gray-700 p-3 rounded mb-3'>
+					<p class='font-semibold mb-1 text-lg'>${t.title}</p>
+					<p class='text-sm mb-2 text-gray-300'>${t.description}</p>
+					<div class='flex justify-between text-xs text-gray-400'>
+						<span>🧑‍💻 ${t.responsible_name || t.responsible}</span>
+						<span>📅 ${t.deadline || '—'}</span>
+					</div>
+					<p class='text-xs text-gray-500 mt-1'>Архивировано: ${t.archived_at}</p>
+					<button onclick='restore(${t.id})' class='bg-green-600 mt-3 px-3 py-1 rounded hover:bg-green-500'>Восстановить</button>
+				</div>`;
+			}
+			// Кнопки в футере
+			html += `<div class="flex gap-2 mt-4">
+				<button onclick='closeModal()' class='flex-1 bg-gray-600 hover:bg-gray-500 py-2 rounded'>Закрыть</button>`;
+			
+			// Добавлена кнопка "Очистить" (только для админов; предполагаем, что isAdmin доступна глобально)
+			if (typeof isAdmin !== 'undefined' && isAdmin) {
+				html += `<button onclick='clearArchive()' class='flex-1 bg-red-600 hover:bg-red-500 py-2 rounded flex items-center justify-center gap-1'>
+					🗑️ Очистить архив
+				</button>`;
+			}
+			html += `</div>`;
+			
+			document.getElementById('modal-content').innerHTML = html;
+			document.getElementById('modal-bg').classList.remove('hidden');
+		});
+}
 
 // === Новая функция: Очистить архив ===
 function clearArchive() {
@@ -191,79 +241,155 @@ function openModal(html) {
 }
 function closeModal() { document.getElementById('modal-bg').classList.add('hidden'); }
 
-
-
-// === Telegram ===
-function saveTelegram() {
-	const token = document.getElementById('tgToken').value.trim();
-	const chat = document.getElementById('tgChat').value.trim();
-	const threshold = document.getElementById('tgThreshold')?.value || 60;
-
-	if (!token || !chat) {
-		return alert('Bot Token и Chat ID обязательны!');
-	}
-
-	const data = new URLSearchParams({
-		action: 'save_telegram_settings',
-		bot_token: token,
-		chat_id: chat,
-		timer_threshold: threshold
-	});
-
-	fetch('api.php', { method: 'POST', body: data })
+// === Открытие модального окна настроек (улучшенная версия) ===
+function openUserSettings() {
+	// Загружаем пользователей
+	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_users' }) })
 		.then(r => r.json())
-		.then(res => {
-			if (res.success) {
-				alert('Настройки Telegram сохранены!');
-			} else {
-				alert('Ошибка: ' + (res.message || 'неизвестно'));
-			}
-		})
-		.catch(err => {
-			console.error(err);
-			alert('Ошибка сети');
+		.then(users => {
+			// Генерируем список пользователей с улучшенным видом
+			let userList = users.map(u => {
+				const adminIcon = u.is_admin ? '👑' : '👤';
+				const delBtn = u.username !== 'user1' ? 
+					`<button class="text-red-400 hover:text-red-300 text-sm px-2 py-1 rounded transition-colors" onclick="deleteUser('${u.username}')">Удалить</button>` : '';
+				return `
+					<div class="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg mb-2 hover:bg-gray-700 transition-colors">
+						<div class="flex items-center gap-2">
+							<span class="text-lg">${adminIcon}</span>
+							<div>
+								<p class="font-medium text-gray-100">${u.name || u.username}</p>
+								<p class="text-xs text-gray-400">${u.username}</p>
+							</div>
+						</div>
+						<div class="flex gap-1">
+							<button class="text-blue-400 hover:text-blue-300 text-sm px-2 py-1 rounded transition-colors" onclick="editUser('${u.username}')">Редактировать</button>
+							${delBtn}
+						</div>
+					</div>
+				`;
+			}).join('');
+
+			// Загружаем Telegram настройки
+			fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_telegram_settings' }) })
+				.then(r => r.json())
+				.then(tg => {
+					// HTML с вкладками для компактности
+					const modalHTML = `
+						<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg transition-colors">✖</button>
+						
+						<div class="flex items-center justify-between mb-4">
+							<h2 class="text-xl font-semibold">⚙️ Настройки</h2>
+						</div>
+
+						<!-- Вкладки -->
+						<div class="flex mb-4 border-b border-gray-700">
+							<button id="tab-users" class="flex-1 py-2 px-4 text-sm font-medium border-b-2 border-blue-500 text-blue-300 bg-gray-700/50">Пользователи</button>
+							<button id="tab-telegram" class="flex-1 py-2 px-4 text-sm font-medium text-gray-400 hover:text-gray-200 bg-gray-800/50">Telegram</button>
+						</div>
+
+						<!-- Контент вкладки "Пользователи" -->
+						<div id="content-users" class="space-y-3 mb-4">
+							<div class="max-h-48 overflow-y-auto border border-gray-700 rounded-lg p-3 bg-gray-800/50">
+								${userList || '<p class="text-gray-400 text-center py-4">Нет пользователей</p>'}
+							</div>
+							
+							<!-- Компактная форма добавления -->
+							<div class="grid grid-cols-1 gap-2 p-3 bg-gray-700/30 rounded-lg">
+								<input id="newUser" placeholder="Логин" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-blue-500">
+								<input id="newName" placeholder="Имя" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-blue-500">
+								<input id="newPass" type="password" placeholder="Пароль" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-blue-500">
+								<label class="flex items-center gap-2 text-xs text-gray-300">
+									<input id="newIsAdmin" type="checkbox" class="rounded">
+									Админ
+								</label>
+								<button onclick="addUser()" class="bg-blue-600 hover:bg-blue-500 text-sm py-2 rounded transition-colors">➕ Добавить</button>
+							</div>
+						</div>
+
+						<!-- Контент вкладки "Telegram" (скрыт по умолчанию) -->
+						<div id="content-telegram" class="hidden space-y-3">
+							<div class="grid grid-cols-1 gap-2 p-3 bg-gray-700/30 rounded-lg">
+								<input id="tgToken" value="${tg.bot_token || ''}" placeholder="Bot Token" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500">
+								<input id="tgChat" value="${tg.chat_id || ''}" placeholder="Chat ID" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500">
+								<div class="flex gap-2 pt-2">
+									<button onclick="saveTelegram()" class="flex-1 bg-green-600 hover:bg-green-500 text-sm py-2 rounded transition-colors">💾 Сохранить</button>
+									<button onclick="testTelegram()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-sm py-2 rounded transition-colors">🧪 Тест</button>
+								</div>
+							</div>
+						</div>
+
+						<!-- Кнопка закрытия -->
+						<button onclick="closeModal()" class="w-full bg-gray-600 hover:bg-gray-500 text-sm py-2 rounded transition-colors mt-4">Закрыть</button>
+					`;
+
+					document.getElementById('modal-content').innerHTML = modalHTML;
+					document.getElementById('modal-content').className = 'bg-gray-800 p-6 rounded-xl w-[35rem] relative shadow-lg border border-gray-700'; // Устанавливаем ширину 35rem
+					document.getElementById('modal-bg').classList.remove('hidden');
+
+					// JS для переключения вкладок
+					document.getElementById('tab-users').onclick = () => {
+						document.getElementById('content-users').classList.remove('hidden');
+						document.getElementById('content-telegram').classList.add('hidden');
+						document.getElementById('tab-users').classList.add('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+						document.getElementById('tab-users').classList.remove('text-gray-400', 'bg-gray-800/50');
+						document.getElementById('tab-telegram').classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+						document.getElementById('tab-telegram').classList.add('text-gray-400', 'bg-gray-800/50');
+					};
+
+					document.getElementById('tab-telegram').onclick = () => {
+						document.getElementById('content-users').classList.add('hidden');
+						document.getElementById('content-telegram').classList.remove('hidden');
+						document.getElementById('tab-telegram').classList.add('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+						document.getElementById('tab-telegram').classList.remove('text-gray-400', 'bg-gray-800/50');
+						document.getElementById('tab-users').classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
+						document.getElementById('tab-users').classList.add('text-gray-400', 'bg-gray-800/50');
+					};
+				});
 		});
 }
 
-case 'save_telegram_settings':
-if (!$isAdmin) exit('forbidden');
-
-$token = trim($_POST['bot_token'] ?? '');
-$chat = trim($_POST['chat_id'] ?? '');
-$threshold = max(1, (int)($_POST['timer_threshold'] ?? 60));
-
-if (empty($token) || empty($chat)) {
-	echo json_encode(['success' => false, 'message' => 'Bot Token и Chat ID обязательны']);
-	break;
+// === Telegram ===
+function saveTelegram() {
+	let data = new URLSearchParams({
+		action: 'save_telegram_settings',
+		bot_token: document.getElementById('tgToken').value,
+		chat_id: document.getElementById('tgChat').value
+	});
+	fetch('api.php', { method: 'POST', body: data })
+		.then(r => r.json())
+		.then(res => alert(res.success ? 'Сохранено!' : 'Ошибка сохранения'));
 }
-
-$stmt = $db->prepare("
-	INSERT OR REPLACE INTO telegram_settings 
-	(id, bot_token, chat_id, timer_threshold) 
-	VALUES (1, :t, :c, :th)
-");
-$stmt->bindValue(':t', $token, SQLITE3_TEXT);
-$stmt->bindValue(':c', $chat, SQLITE3_TEXT);
-$stmt->bindValue(':th', $threshold, SQLITE3_INTEGER);
-$stmt->execute();
-
-echo json_encode(['success' => true, 'message' => 'Сохранено']);
-break;
 
 function testTelegram() {
 	let data = new URLSearchParams({ action: 'test_telegram' });
 	fetch('api.php', { method: 'POST', body: data })
 		.then(r => r.json())
-		.then(res => {
-			if (res.success) {
-				alert('✅ ' + res.message);
-			} else {
-				alert('❌ ' + res.message);
-			}
-		})
-		.catch(err => {
-			console.error('Ошибка теста Telegram:', err);
-			alert('Ошибка сети или сервера. Проверьте консоль.');
+		.then(res => alert(res.success || res.error || 'Ошибка'));
+}
+
+// === Редактирование пользователя ===
+function editUser(username) {
+	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_user', username }) })
+		.then(r => r.json())
+		.then(u => {
+			openModal(`
+				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
+				<h2 class='text-xl mb-4 font-semibold text-center'>Редактировать пользователя</h2>
+				<label class='block mb-1 text-sm text-gray-400'>Логин (нельзя изменить):</label>
+				<input id='editUser' value='${u.username}' class='w-full mb-3 p-2 rounded bg-gray-600' readonly>
+				<label class='block mb-1 text-sm text-gray-400'>Имя:</label>
+				<input id='editName' value='${u.name || ''}' class='w-full mb-3 p-2 rounded bg-gray-700' placeholder='Полное имя'>
+				<label class='block mb-1 text-sm text-gray-400'>Новый пароль (оставьте пустым, чтобы не менять):</label>
+				<input id='editPass' type='password' class='w-full mb-3 p-2 rounded bg-gray-700' placeholder='Новый пароль'>
+				<div class='flex items-center gap-2 mb-3'>
+					<input id='editIsAdmin' type='checkbox' ${u.is_admin ? 'checked' : ''}>
+					<label for='editIsAdmin' class='text-sm'>Администратор</label>
+				</div>
+				<div class='flex gap-2'>
+					<button onclick='updateUser("${u.username}")' class='flex-1 bg-blue-600 hover:bg-blue-500 p-2 rounded'>Сохранить</button>
+					<button onclick='closeModal()' class='flex-1 bg-gray-600 hover:bg-gray-500 p-2 rounded'>Отмена</button>
+				</div>
+			`);
 		});
 }
 
@@ -296,135 +422,3 @@ function deleteUser(name) {
 
 // Загрузка пользователей при старте
 loadUsers();
-
-// === Настройки пользователей + Telegram + Уведомления ===
-function openUserSettings() {
-	if (!isAdmin) return alert('Доступ запрещён');
-
-	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_users' }) })
-		.then(r => r.json())
-		.then(users => {
-			const userList = users.map(u => {
-				const adminIcon = u.is_admin ? 'Admin' : 'User';
-				const delBtn = u.username !== 'user1' ? 
-					`<button class="text-red-400 hover:text-red-300 text-sm px-2 py-1 rounded transition-colors" onclick="deleteUser('${u.username}')">Удалить</button>` : '';
-				return `
-					<div class="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg mb-2 hover:bg-gray-700 transition-colors">
-						<div class="flex items-center gap-2">
-							<span class="text-lg">${adminIcon}</span>
-							<div>
-								<p class="font-medium text-gray-100">${u.name || u.username}</p>
-								<p class="text-xs text-gray-400">${u.username}</p>
-							</div>
-						</div>
-						<div class="flex gap-1">
-							<button class="text-blue-400 hover:text-blue-300 text-sm px-2 py-1 rounded transition-colors" onclick="editUser('${u.username}')">Редактировать</button>
-							${delBtn}
-						</div>
-					</div>
-				`;
-			}).join('');
-
-			fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_telegram_settings' }) })
-				.then(r => r.json())
-				.then(tg => {
-					const threshold = tg.timer_threshold || 60;
-					const modalHTML = `
-						<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg transition-colors">X</button>
-						<div class="flex items-center justify-between mb-4">
-							<h2 class="text-xl font-semibold">Настройки</h2>
-						</div>
-
-						<!-- Вкладки -->
-						<div class="flex mb-4 border-b border-gray-700">
-							<button id="tab-users" class="flex-1 py-2 px-4 text-sm font-medium border-b-2 border-blue-500 text-blue-300 bg-gray-700/50">Пользователи</button>
-							<button id="tab-telegram" class="flex-1 py-2 px-4 text-sm font-medium text-gray-400 hover:text-gray-200 bg-gray-800/50">Telegram</button>
-							<button id="tab-notifications" class="flex-1 py-2 px-4 text-sm font-medium text-gray-400 hover:text-gray-200 bg-gray-800/50">Уведомления</button>
-						</div>
-
-						<!-- Вкладка: Пользователи -->
-						<div id="content-users" class="space-y-3 mb-4">
-							<div class="max-h-48 overflow-y-auto border border-gray-700 rounded-lg p-3 bg-gray-800/50">
-								${userList || '<p class="text-gray-400 text-center py-4">Нет пользователей</p>'}
-							</div>
-							<div class="grid grid-cols-1 gap-2 p-3 bg-gray-700/30 rounded-lg">
-								<input id="newUser" placeholder="Логин" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-blue-500">
-								<input id="newName" placeholder="Имя" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-blue-500">
-								<input id="newPass" type="password" placeholder="Пароль" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-blue-500">
-								<label class="flex items-center gap-2 text-xs text-gray-300">
-									<input id="newIsAdmin" type="checkbox" class="rounded"> Админ
-								</label>
-								<button onclick="addUser()" class="bg-blue-600 hover:bg-blue-500 text-sm py-2 rounded transition-colors">Добавить</button>
-							</div>
-						</div>
-
-						<!-- Вкладка: Telegram -->
-						<div id="content-telegram" class="hidden space-y-3">
-							<div class="grid grid-cols-1 gap-2 p-3 bg-gray-700/30 rounded-lg">
-								<input id="tgToken" value="${tg.bot_token || ''}" placeholder="Bot Token" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500">
-								<input id="tgChat" value="${tg.chat_id || ''}" placeholder="Chat ID" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500">
-								<div class="flex gap-2 pt-2">
-									<button onclick="saveTelegram()" class="flex-1 bg-green-600 hover:bg-green-500 text-sm py-2 rounded transition-colors">Сохранить</button>
-									<button onclick="testTelegram()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-sm py-2 rounded transition-colors">Тест</button>
-								</div>
-							</div>
-						</div>
-
-						<!-- Вкладка: Уведомления -->
-						<div id="content-notifications" class="hidden space-y-3">
-							<div class="p-3 bg-yellow-900/30 border border-yellow-700 rounded-lg">
-								<p class="text-sm text-yellow-300 mb-2">Уведомление отправляется, когда задача находится в колонке с таймером дольше указанного времени.</p>
-							</div>
-							<div class="grid grid-cols-1 gap-2 p-3 bg-gray-700/30 rounded-lg">
-								<label class="text-sm text-gray-300">Через сколько <b>минут</b> присылать уведомление?</label>
-								<input id="timerThreshold" type="number" min="1" value="${threshold}" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-yellow-500">
-								<div class="text-xs text-gray-400 mt-1">Например: 1, 30, 60, 1440 (24 часа)</div>
-								<button onclick="saveTimerThreshold()" class="bg-yellow-600 hover:bg-yellow-500 text-sm py-2 rounded transition-colors mt-2">Сохранить порог</button>
-							</div>
-						</div>
-
-						<button onclick="closeModal()" class="w-full bg-gray-600 hover:bg-gray-500 text-sm py-2 rounded transition-colors mt-4">Закрыть</button>
-					`;
-
-					openModal(modalHTML);
-					document.getElementById('modal-content').className = 'bg-gray-800 p-6 rounded-xl w-[38rem] relative shadow-lg border border-gray-700';
-
-					// === Обработчики вкладок ===
-					const setActiveTab = (activeId, contentId) => {
-						['users', 'telegram', 'notifications'].forEach(id => {
-							const tab = document.getElementById(`tab-${id}`);
-							const content = document.getElementById(`content-${id}`);
-							if (id === activeId) {
-								tab.className = 'flex-1 py-2 px-4 text-sm font-medium border-b-2 border-blue-500 text-blue-300 bg-gray-700/50';
-								content.classList.remove('hidden');
-							} else {
-								tab.className = 'flex-1 py-2 px-4 text-sm font-medium text-gray-400 hover:text-gray-200 bg-gray-800/50';
-								content.classList.add('hidden');
-							}
-						});
-					};
-
-					document.getElementById('tab-users').onclick = () => setActiveTab('users', 'content-users');
-					document.getElementById('tab-telegram').onclick = () => setActiveTab('telegram', 'content-telegram');
-					document.getElementById('tab-notifications').onclick = () => setActiveTab('notifications', 'content-notifications');
-				});
-		});
-}
-
-// === Сохранение порога таймера ===
-function saveTimerThreshold() {
-	const threshold = document.getElementById('timerThreshold').value;
-	if (!threshold || threshold < 1) return alert('Введите число больше 0');
-
-	fetch('api.php', {
-		method: 'POST',
-		body: new URLSearchParams({
-			action: 'save_timer_threshold',
-			timer_threshold: threshold
-		})
-	})
-	.then(r => r.json())
-	.then(res => {
-		alert(res.success ? `Уведомления будут приходить через ${threshold} мин.` : 'Ошибка');
-	});
-}

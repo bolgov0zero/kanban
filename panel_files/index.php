@@ -61,7 +61,7 @@ $version = $versionData['version'] ?? 'unknown';
 	<div class="flex gap-2 items-center">
 		<span class="username-tag"><?=htmlspecialchars($user_name)?></span>
 		<?php if ($isAdmin): ?><button onclick="openUserSettings()" class="bg-gray-700 px-3 py-1 rounded hover:bg-gray-600">⚙️ Настройки</button><?php endif; ?>
-		<?php if ($isAdmin): ?><button onclick="openAddColumn()" class="bg-gray-700 px-3 py-1 rounded hover:bg-gray-600">⬇️ Колонка</button><?php endif; ?>
+		<button onclick="openAddColumn()" class="bg-gray-700 px-3 py-1 rounded hover:bg-gray-600">⬇️ Колонка</button>
 		<button onclick="openAddTask()" class="bg-gray-700 px-3 py-1 rounded hover:bg-gray-600">✅ Задача</button>
 		<button onclick="openArchive()" class="bg-gray-700 px-3 py-1 rounded hover:bg-gray-600">📦 Архив</button>
 		<a href="logout.php" class="bg-red-700 px-3 py-1 rounded hover:bg-red-600">Выйти</a>
@@ -76,7 +76,7 @@ $version = $versionData['version'] ?? 'unknown';
 	<div class="p-2 text-center rounded flex justify-between items-center mb-2"
 		 style="background:<?=$col['bg_color']?>;color:<?=getContrastColor($col['bg_color'])?>;">
 		<h2 class="font-semibold"><?=$col['name']?></h2>
-		<?php if ($isAdmin): ?><button onclick="editColumn(<?=$col['id']?>)" class="text-sm opacity-75 hover:opacity-100">✏️</button><?php endif; ?>
+		<button onclick="editColumn(<?=$col['id']?>)" class="text-sm opacity-75 hover:opacity-100">✏️</button>
 	</div>
 
 	<div class="flex-1" id="col<?=$col['id']?>">
@@ -88,13 +88,9 @@ $version = $versionData['version'] ?? 'unknown';
 	$authorName = $userNames[$user] ?? $user;
 	$respName = $userNames[$task['responsible']] ?? $task['responsible'];
 	?>
-	<div draggable="true" 
-	 ondragstart="drag(event)" 
-	 id="task<?= $task['id'] ?>" 
-	 class="p-2 rounded cursor-move flex flex-col justify-between task-card"
-	 style="background:<?= $col['task_color'] ?>;color:<?= getContrastColor($col['task_color']) ?>;"
-	 data-timer-enabled="<?= $col['timer'] ? 'true' : 'false' ?>"
-	 data-moved-at="<?= htmlspecialchars($task['moved_at'] ?? '') ?>">
+	<div draggable="true" ondragstart="drag(event)" id="task<?=$task['id']?>" class="p-2 rounded cursor-move flex flex-col justify-between task-card"
+		 style="background:<?=$col['task_color']?>;color:<?=getContrastColor($col['task_color'])?>;"
+		 <?php if($col['timer'] && !empty($task['moved_at'])): ?>data-moved-at="<?= htmlspecialchars($task['moved_at']) ?>" data-timer-enabled="true"<?php endif; ?>>
 		<div class="mb-2">
 			<p class="text-[11px] text-gray-500 -mb-1 created-date" data-created="<?= htmlspecialchars($task['created_at']) ?>"></p>
 			<div class="flex justify-between items-center mb-1">
@@ -133,12 +129,8 @@ $version = $versionData['version'] ?? 'unknown';
 				<?php else: ?>
 					<div class="flex flex-col items-end gap-1">
 						<span class="tag <?=$tagColor?> text-white"><?=$task['importance']?></span>
-						<?php if($col['timer']): ?>
-							<span class="timer-tag tag flex items-center gap-1" 
-								  id="timer-<?= $task['id'] ?>" 
-								  data-moved-at="<?= htmlspecialchars($task['moved_at'] ?? '') ?>">
-								--:--:--
-							</span>
+						<?php if($col['timer'] && !empty($task['moved_at'])): ?>
+							<span class="timer-tag tag flex items-center gap-1" id="timer-<?= $task['id'] ?>">⏱️ --:--:--</span>
 						<?php endif; ?>
 					</div>
 				<?php endif; ?>
@@ -157,17 +149,17 @@ $version = $versionData['version'] ?? 'unknown';
 <script>
 var isAdmin = <?= $isAdmin ? 'true' : 'false' ?>;
 
-// Функция для парсинга даты как UTC (без TZ смещения)
-function parseUTCMovedDate(dateStr) {
-  // dateStr в формате 'YYYY-MM-DD HH:MM:SS' (UTC от сервера)
-  const isoStr = dateStr.replace(' ', 'T') + 'Z';  // Добавляем 'Z' для UTC
+// Функция для парсинга даты из Moscow timezone (UTC+3)
+function parseMoscowDate(dateStr) {
+  // dateStr в формате 'YYYY-MM-DD HH:MM:SS'
+  const isoStr = dateStr.replace(' ', 'T') + '+03:00';
   return new Date(isoStr);
 }
 
-// Обновление дат создания задач (локальное время браузера) — без изменений
+// Обновление дат создания задач (локальное время браузера)
 function updateCreatedDates() {
   document.querySelectorAll('.created-date[data-created]').forEach(el => {
-	const moscowDate = parseMoscowDate(el.getAttribute('data-created'));  // Оставляем для created_at (Moscow)
+	const moscowDate = parseMoscowDate(el.getAttribute('data-created'));
 	const options = { 
 	  day: '2-digit', 
 	  month: '2-digit', 
@@ -180,7 +172,7 @@ function updateCreatedDates() {
   });
 }
 
-// Обновление дедлайнов (локальное время) — без изменений
+// Обновление дедлайнов (локальное время)
 function updateDeadlines() {
   document.querySelectorAll('.deadline-tag[data-deadline]').forEach(el => {
 	const deadlineStr = el.getAttribute('data-deadline'); // 'YYYY-MM-DD'
@@ -198,7 +190,7 @@ function updateDeadlines() {
   });
 }
 
-// Динамический таймер (elapsed time в UTC, без локального TZ)
+// Динамический таймер (elapsed time, отображение в локальном формате, но diff универсален)
 function updateTimers() {
   document.querySelectorAll('[data-timer-enabled="true"]').forEach(task => {
 	const movedAtStr = task.getAttribute('data-moved-at');
@@ -206,27 +198,21 @@ function updateTimers() {
 	const timerEl = document.getElementById('timer-' + taskId);
 	if (!timerEl || !movedAtStr) return;
 
-	const utcMovedDate = parseUTCMovedDate(movedAtStr);  // Парсим как UTC
-	const nowMs = Date.now();  // Текущее UTC ms
-	const diffMs = nowMs - utcMovedDate.getTime();  // ms, чистая разница
+	const moscowMovedDate = parseMoscowDate(movedAtStr);
+	const now = new Date(); // Локальное время браузера
+	const diff = now.getTime() - moscowMovedDate.getTime(); // ms, учитывая TZ при парсинге
 
-	const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-	const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-	const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-	const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+	const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+	const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+	const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+	const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
 	let timerStr = '';
 	if (days > 0) timerStr += days + 'д ';
 	timerStr += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 
-	timerEl.innerHTML = '⏱️ ' + timerStr;  // innerHTML для emoji
+	timerEl.textContent = '⏱️ ' + timerStr;
   });
-}
-
-// Функция для парсинга Moscow дат (оставляем для created_at и deadline)
-function parseMoscowDate(dateStr) {
-  const isoStr = dateStr.replace(' ', 'T') + '+03:00';
-  return new Date(isoStr);
 }
 
 // Инициализация всех обновлений при загрузке
@@ -238,6 +224,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Запуск обновления таймера каждую секунду
 setInterval(updateTimers, 1000);
+
+// Если нужно обновлять даты/дедлайны динамически (например, при reload задач), вызовите функции снова
 </script>
 <?php include 'modals.php'; ?>
 </body>
