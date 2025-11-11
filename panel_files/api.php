@@ -59,6 +59,15 @@ $user_name_stmt->bindValue(':u', $user, SQLITE3_TEXT);
 $user_name = $user_name_stmt->execute()->fetchArray(SQLITE3_ASSOC)['name'] ?? $user;
 
 switch ($action) {
+	case 'save_timer_threshold':
+		if(!$isAdmin) exit('forbidden');
+		$threshold = max(1, (int)($_POST['timer_threshold'] ?? 60));
+		$stmt = $db->prepare("INSERT OR REPLACE INTO telegram_settings (id, timer_threshold) VALUES (1, :th) ON CONFLICT(id) DO UPDATE SET timer_threshold = :th");
+		$stmt->bindValue(':th', $threshold, SQLITE3_INTEGER);
+		$stmt->execute();
+		echo json_encode(['success' => true]);
+		break;
+	
 	case 'get_telegram_settings':
 		if(!$isAdmin) exit('forbidden');
 		$stmt = $db->prepare("SELECT bot_token, chat_id, timer_threshold FROM telegram_settings WHERE id=1");

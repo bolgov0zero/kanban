@@ -71,6 +71,7 @@ ensureColumn('tasks', 'created_at', 'TEXT');
 ensureColumn('archive', 'responsible_name', 'TEXT');
 ensureColumn('columns', 'timer', 'INTEGER DEFAULT 0');
 ensureColumn('tasks', 'moved_at', 'TEXT');
+ensureColumn('telegram_settings', 'timer_threshold', 'INTEGER DEFAULT 60');
 
 // === Начальные Telegram настройки ===
 $tg_exists = $db->querySingle("SELECT COUNT(*) FROM telegram_settings WHERE id=1");
