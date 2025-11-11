@@ -19,10 +19,55 @@ function drop(ev) {
 
 	ev.currentTarget.classList.remove('drop-hover');
 
+	// --- КЛЮЧЕВОЕ: Устанавливаем moved_at, если колонка с таймером ---
+	const timerEnabled = ev.currentTarget.dataset.timer === '1';
+	const movedAt = timerEnabled ? new Date().toISOString().slice(0, 19).replace('T', ' ') : null;
+
 	fetch('api.php', {
 		method: 'POST',
-		body: new URLSearchParams({ action: 'move_task', task_id: taskId, column_id: colId })
-	}).then(() => location.reload());
+		body: new URLSearchParams({ 
+			action: 'move_task', 
+			task_id: taskId, 
+			column_id: colId,
+			moved_at: movedAt
+		})
+	}).then(() => {
+		if (timerEnabled) {
+			// Обновляем атрибут и запускаем таймер сразу
+			task.setAttribute('data-moved-at', movedAt);
+			task.setAttribute('data-timer-enabled', 'true');
+			const timerEl = document.getElementById('timer-' + taskId);
+			if (timerEl) {
+				timerEl.setAttribute('data-moved-at', movedAt);
+				updateTimerForTask(taskId, movedAt);
+			}
+		}
+		location.reload();
+	});
+}
+
+function updateTimers() {
+	document.querySelectorAll('[data-timer-enabled="true"]').forEach(task => {
+		const movedAtStr = task.getAttribute('data-moved-at');
+		const taskId = task.id.replace('task', '');
+		if (!movedAtStr) return;
+
+		const utcMovedDate = parseUTCMovedDate(movedAtStr);
+		const nowMs = Date.now();
+		const diffMs = nowMs - utcMovedDate.getTime();
+
+		const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+		const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+		const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+		const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+		let timerStr = '';
+		if (days > 0) timerStr += days + 'д ';
+		timerStr += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+		const timerEl = document.getElementById('timer-' + taskId);
+		if (timerEl) timerEl.innerHTML = timerStr;
+	});
 }
 
 function getContrastColor(hex) {
@@ -150,16 +195,60 @@ function closeModal() { document.getElementById('modal-bg').classList.add('hidde
 
 // === Telegram ===
 function saveTelegram() {
-	let data = new URLSearchParams({
+	const token = document.getElementById('tgToken').value.trim();
+	const chat = document.getElementById('tgChat').value.trim();
+	const threshold = document.getElementById('tgThreshold')?.value || 60;
+
+	if (!token || !chat) {
+		return alert('Bot Token и Chat ID обязательны!');
+	}
+
+	const data = new URLSearchParams({
 		action: 'save_telegram_settings',
-		bot_token: document.getElementById('tgToken').value,
-		chat_id: document.getElementById('tgChat').value,
-		timer_threshold: document.getElementById('tgThreshold').value || 60
+		bot_token: token,
+		chat_id: chat,
+		timer_threshold: threshold
 	});
+
 	fetch('api.php', { method: 'POST', body: data })
 		.then(r => r.json())
-		.then(res => alert(res.success ? 'Сохранено!' : 'Ошибка: ' + (res.message || 'неизвестно')));
+		.then(res => {
+			if (res.success) {
+				alert('Настройки Telegram сохранены!');
+			} else {
+				alert('Ошибка: ' + (res.message || 'неизвестно'));
+			}
+		})
+		.catch(err => {
+			console.error(err);
+			alert('Ошибка сети');
+		});
 }
+
+case 'save_telegram_settings':
+if (!$isAdmin) exit('forbidden');
+
+$token = trim($_POST['bot_token'] ?? '');
+$chat = trim($_POST['chat_id'] ?? '');
+$threshold = max(1, (int)($_POST['timer_threshold'] ?? 60));
+
+if (empty($token) || empty($chat)) {
+	echo json_encode(['success' => false, 'message' => 'Bot Token и Chat ID обязательны']);
+	break;
+}
+
+$stmt = $db->prepare("
+	INSERT OR REPLACE INTO telegram_settings 
+	(id, bot_token, chat_id, timer_threshold) 
+	VALUES (1, :t, :c, :th)
+");
+$stmt->bindValue(':t', $token, SQLITE3_TEXT);
+$stmt->bindValue(':c', $chat, SQLITE3_TEXT);
+$stmt->bindValue(':th', $threshold, SQLITE3_INTEGER);
+$stmt->execute();
+
+echo json_encode(['success' => true, 'message' => 'Сохранено']);
+break;
 
 function testTelegram() {
 	let data = new URLSearchParams({ action: 'test_telegram' });

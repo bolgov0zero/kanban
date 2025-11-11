@@ -88,9 +88,13 @@ $version = $versionData['version'] ?? 'unknown';
 	$authorName = $userNames[$user] ?? $user;
 	$respName = $userNames[$task['responsible']] ?? $task['responsible'];
 	?>
-	<div draggable="true" ondragstart="drag(event)" id="task<?=$task['id']?>" class="p-2 rounded cursor-move flex flex-col justify-between task-card"
-		 style="background:<?=$col['task_color']?>;color:<?=getContrastColor($col['task_color'])?>;"
-		 <?php if($col['timer'] && !empty($task['moved_at'])): ?>data-moved-at="<?= htmlspecialchars($task['moved_at']) ?>" data-timer-enabled="true"<?php endif; ?>>
+	<div draggable="true" 
+	 ondragstart="drag(event)" 
+	 id="task<?= $task['id'] ?>" 
+	 class="p-2 rounded cursor-move flex flex-col justify-between task-card"
+	 style="background:<?= $col['task_color'] ?>;color:<?= getContrastColor($col['task_color']) ?>;"
+	 data-timer-enabled="<?= $col['timer'] ? 'true' : 'false' ?>"
+	 data-moved-at="<?= htmlspecialchars($task['moved_at'] ?? '') ?>">
 		<div class="mb-2">
 			<p class="text-[11px] text-gray-500 -mb-1 created-date" data-created="<?= htmlspecialchars($task['created_at']) ?>"></p>
 			<div class="flex justify-between items-center mb-1">
@@ -129,8 +133,12 @@ $version = $versionData['version'] ?? 'unknown';
 				<?php else: ?>
 					<div class="flex flex-col items-end gap-1">
 						<span class="tag <?=$tagColor?> text-white"><?=$task['importance']?></span>
-						<?php if($col['timer'] && !empty($task['moved_at'])): ?>
-							<span class="timer-tag tag flex items-center gap-1" id="timer-<?= $task['id'] ?>">⏱️ --:--:--</span>
+						<?php if($col['timer']): ?>
+							<span class="timer-tag tag flex items-center gap-1" 
+								  id="timer-<?= $task['id'] ?>" 
+								  data-moved-at="<?= htmlspecialchars($task['moved_at'] ?? '') ?>">
+								--:--:--
+							</span>
 						<?php endif; ?>
 					</div>
 				<?php endif; ?>

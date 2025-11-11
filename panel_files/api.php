@@ -69,23 +69,36 @@ switch ($action) {
 		break;
 	
 	case 'get_telegram_settings':
-		if(!$isAdmin) exit('forbidden');
+		if (!$isAdmin) exit('forbidden');
 		$stmt = $db->prepare("SELECT bot_token, chat_id, timer_threshold FROM telegram_settings WHERE id=1");
 		$res = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
-		echo json_encode($res ?: ['bot_token' => '', 'chat_id' => '', 'timer_threshold' => 60], JSON_UNESCAPED_UNICODE);
+		$data = $res ?: ['bot_token' => '', 'chat_id' => '', 'timer_threshold' => 60];
+		echo json_encode($data, JSON_UNESCAPED_UNICODE);
 		break;
 
 	case 'save_telegram_settings':
-		if(!$isAdmin) exit('forbidden');
+		if (!$isAdmin) exit('forbidden');
+		
 		$token = trim($_POST['bot_token'] ?? '');
 		$chat = trim($_POST['chat_id'] ?? '');
-		$threshold = max(1, (int)($_POST['timer_threshold'] ?? 60)); // min 1
-		$stmt = $db->prepare("INSERT OR REPLACE INTO telegram_settings (id, bot_token, chat_id, timer_threshold) VALUES (1, :t, :c, :th)");
+		$threshold = max(1, (int)($_POST['timer_threshold'] ?? 60));
+		
+		if (empty($token) || empty($chat)) {
+			echo json_encode(['success' => false, 'message' => 'Bot Token и Chat ID обязательны']);
+			break;
+		}
+		
+		$stmt = $db->prepare("
+			INSERT OR REPLACE INTO telegram_settings 
+			(id, bot_token, chat_id, timer_threshold) 
+			VALUES (1, :t, :c, :th)
+		");
 		$stmt->bindValue(':t', $token, SQLITE3_TEXT);
 		$stmt->bindValue(':c', $chat, SQLITE3_TEXT);
 		$stmt->bindValue(':th', $threshold, SQLITE3_INTEGER);
 		$stmt->execute();
-		echo json_encode(['success' => true, 'message' => 'Настройки сохранены']);
+		
+		echo json_encode(['success' => true, 'message' => 'Сохранено']);
 		break;
 
 	case 'test_telegram':
@@ -192,44 +205,24 @@ switch ($action) {
 		break;
 
 	case 'move_task':
-		$task_id = (int)$_POST['task_id'];
-		$col_id = (int)$_POST['column_id'];
-		// Обновляем колонку
-		$stmt = $db->prepare("UPDATE tasks SET column_id = :c WHERE id = :id");
-		$stmt->bindValue(':c', $col_id, SQLITE3_INTEGER);
-		$stmt->bindValue(':id', $task_id, SQLITE3_INTEGER);
-		$stmt->execute();
-		
-		// Получаем данные колонки для уведомлений
-		$col = $db->querySingle("SELECT * FROM columns WHERE id = $col_id", true);
-		$title = $db->querySingle("SELECT title FROM tasks WHERE id = $task_id", true)['title'] ?? 'Без названия';
-		$resp = $db->querySingle("SELECT responsible FROM tasks WHERE id = $task_id", true)['responsible'] ?? 'Не указан';
-		$resp_name = $db->querySingle("SELECT name FROM users WHERE username='$resp'", true)['name'] ?? $resp;
-		$col_name = $col['name'] ?? 'Неизвестная колонка';
-		
-		// Если колонка с таймером, обновляем moved_at в UTC и сбрасываем notified_at
-		if ($col['timer']) {
-			$stmt_move = $db->prepare("UPDATE tasks SET moved_at = :moved, notified_at = NULL WHERE id = :id");
-			$stmt_move->bindValue(':moved', gmdate('Y-m-d H:i:s'), SQLITE3_TEXT);  // UTC time
-			$stmt_move->bindValue(':id', $task_id, SQLITE3_INTEGER);
-			$stmt_move->execute();
-		}
-		
-		// Уведомление о перемещении (без изменений)
-		if (!empty($bot_token) && !empty($chat_id)) {
-			$move_text = "➡️ <b>Задача перемещена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i>\n📂 <b>В колонку:</b> <i>$col_name</i>\n🧑‍💻 <b>Исполнитель:</b> <i>$resp_name</i></blockquote>";
-			$result = sendTelegram($bot_token, $chat_id, $move_text);
-			if (!$result) error_log("Failed to send move task notification");
-		}
-		
-		// Уведомление о завершении, если колонка с auto_complete (без изменений)
-		if ($col['auto_complete']) {
-			$complete_text = "✅ <b>Задача завершена</b>\n<blockquote>👤 <b>Кем:</b> <i>$user_name</i>\n📋 <b>Задача:</b> <i>$title</i></blockquote>";
-			sendTelegram($bot_token, $chat_id, $complete_text);
-			// Устанавливаем completed=1
-			$db->exec("UPDATE tasks SET completed = 1 WHERE id = $task_id");
-		}
-		break;
+	$task_id = (int)$_POST['task_id'];
+	$column_id = (int)$_POST['column_id'];
+	$moved_at = $_POST['moved_at'] ?? null;
+	
+	$col = $db->query("SELECT timer FROM columns WHERE id=$column_id")->fetchArray(SQLITE3_ASSOC);
+	if (!$col) break;
+	
+	// Если колонка с таймером — сохраняем moved_at, иначе сбрасываем
+	if ($col['timer'] && $moved_at) {
+		$stmt = $db->prepare("UPDATE tasks SET column_id=:c, moved_at=:m WHERE id=:id");
+		$stmt->bindValue(':m', $moved_at, SQLITE3_TEXT);
+	} else {
+		$stmt = $db->prepare("UPDATE tasks SET column_id=:c, moved_at=NULL WHERE id=:id");
+	}
+	$stmt->bindValue(':c', $column_id, SQLITE3_INTEGER);
+	$stmt->bindValue(':id', $task_id, SQLITE3_INTEGER);
+	$stmt->execute();
+	break;
 
 	case 'archive_now':
 		$id=(int)$_POST['id'];
