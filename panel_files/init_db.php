@@ -36,8 +36,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS columns (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	name TEXT NOT NULL,
 	bg_color TEXT DEFAULT '#374151',
-	task_color TEXT DEFAULT '#1f2937',
-	auto_complete INTEGER DEFAULT 0
+	auto_complete INTEGER DEFAULT 0  /* Убрано task_color */
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS tasks (
@@ -63,6 +62,12 @@ $db->exec("CREATE TABLE IF NOT EXISTS archive (
 	archived_at TEXT
 )");
 
+$db->exec("CREATE TABLE IF NOT EXISTS links (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL,
+	url TEXT NOT NULL
+)");
+
 // === Дополнительные поля ===
 ensureColumn('users', 'name', 'TEXT');
 ensureColumn('columns', 'auto_complete', 'INTEGER DEFAULT 0');
@@ -71,27 +76,26 @@ ensureColumn('tasks', 'created_at', 'TEXT');
 ensureColumn('archive', 'responsible_name', 'TEXT');
 ensureColumn('columns', 'timer', 'INTEGER DEFAULT 0');
 ensureColumn('tasks', 'moved_at', 'TEXT');
+ensureColumn('tasks', 'author', 'TEXT');
 
-// === Начальные Telegram настройки ===
+// === Начальные Telegram настройки: добавляем только если не существуют ===
 $tg_exists = $db->querySingle("SELECT COUNT(*) FROM telegram_settings WHERE id=1");
 if ($tg_exists == 0) {
 	$stmt = $db->prepare("INSERT INTO telegram_settings (id, bot_token, chat_id) VALUES (1, '', '')");
 	$stmt->execute();
 }
 
-// === Миграция responsible_name для archive (исправлено для SQLite: loop вместо UPDATE FROM) ===
+// === Заполнение responsible_name для существующих записей в archive (если нужно) ===
 $archive_count = $db->querySingle("SELECT COUNT(*) FROM archive");
 if ($archive_count > 0) {
-	$res = $db->query("SELECT id, responsible FROM archive");
-	while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
-		$resp_name = $db->querySingle("SELECT COALESCE(name, '{$row['responsible']}') FROM users WHERE username = '{$row['responsible']}'", true)['name'] ?? $row['responsible'];
-		$stmt = $db->prepare("UPDATE archive SET responsible_name = :rn WHERE id = :id");
-		$stmt->bindValue(':rn', $resp_name, SQLITE3_TEXT);
-		$stmt->bindValue(':id', $row['id'], SQLITE3_INTEGER);
-		$stmt->execute();
-	}
+	$db->exec("
+		UPDATE archive 
+		SET responsible_name = COALESCE(u.name, archive.responsible) 
+		FROM users u 
+		WHERE archive.responsible = u.username
+	");
 }
 
-echo "База данных успешно инициализирована! (пользователи и колонки создайте вручную)\n";
-echo "<p><a href='auth.php'>Перейти к авторизации</a></p>";
+echo "<h2 class='text-green-500 font-bold'>База данных успешно инициализирована! (пользователи и колонки создайте вручную)</h2>";
+echo "<p><a href='auth.php' class='text-blue-400 underline'>Перейти к авторизации</a></p>";
 ?>

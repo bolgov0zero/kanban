@@ -1,321 +1,565 @@
-<style<div id="modal-bg" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-	<div id="modal-content" class="bg-gray-800 p-6 rounded-xl w-96 relative shadow-lg border border-gray-700">
-		<!-- контент модального окна вставляется JS -->
+<?php
+// Этот файл содержит HTML для всех модальных окон
+// Функции управления находятся в script.js
+?>
+
+<!-- Main Modal Container -->
+<div id="modal-bg" class="modal-backdrop hidden">
+	<div id="modal-container" class="modal-container">
+		<div id="modal-content" class="modal-content">
+			<!-- контент вставляется динамически -->
+		</div>
 	</div>
 </div>
 
-<script>
-// === Универсальная функция закрытия модального окна ===
-function closeModal() {
-	document.getElementById('modal-bg').classList.add('hidden');
-}
-
-// === Открытие модалки для добавления колонки ===
-function openAddColumn() {
-	document.getElementById('modal-bg').classList.remove('hidden');
-	document.getElementById('modal-content').innerHTML = `
-		<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
-		<h2 class='text-xl mb-4 font-semibold text-center'>Добавить колонку</h2>
-
-		<label class='block mb-1 text-sm text-gray-400'>Название колонки:</label>
-		<input id='colName' placeholder='Например: В работе' class='w-full mb-3 p-2 rounded bg-gray-700'>
-
-		<label class='block mb-1 text-sm text-gray-400'>Цвет заголовка:</label>
-		<input id='colBg' type='color' value='#374151' class='w-full mb-3 h-10 rounded'>
-
-		<label class='block mb-1 text-sm text-gray-400'>Цвет задач в колонке:</label>
-		<input id='taskBg' type='color' value='#1f2937' class='w-full mb-3 h-10 rounded'>
-
-		<label class='flex items-center gap-2 mb-3'>
-			<input id='autoComplete' type='checkbox' class='rounded'>
-			<span class='text-sm'>Автоматически завершать задачи в этой колонке</span>
-		</label>
-
-		<label class='flex items-center gap-2 mb-3'>
-			<input id='timer' type='checkbox' class='rounded'>
-			<span class='text-sm'>Таймер (время в колонке)</span>
-		</label>
-
-		<div class="flex gap-2">
-			<button onclick='saveColumn()' class='flex-1 bg-blue-600 hover:bg-blue-500 p-2 rounded'>Сохранить</button>
-			<button onclick='closeModal()' class='flex-1 bg-gray-600 hover:bg-gray-500 p-2 rounded'>Отмена</button>
+<!-- Link Picker Modal -->
+<div id="link-picker" class="modal-backdrop hidden">
+	<div class="modal-container">
+		<div class="link-picker-container">
+			<div class="link-picker-header">
+				<h3 class="link-picker-title">Быстрые ссылки</h3>
+				<button onclick="closeLinkPicker()" class="link-picker-close">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+					</svg>
+				</button>
+			</div>
+			<div id="links-list" class="links-list"></div>
+			<?php if ($isAdmin): ?>
+			<div class="link-picker-form">
+				<input id="linkName" placeholder="Имя ссылки" class="link-input">
+				<input id="linkUrl" placeholder="https://..." class="link-input">
+				<button onclick="saveLink()" class="link-add-btn">
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+					</svg>
+					Добавить ссылку
+				</button>
+			</div>
+			<?php endif; ?>
 		</div>
-	`;
-}
+	</div>
+</div>
 
-// === Открытие модалки для редактирования колонки ===
-function editColumn(id) {
-	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_column', id }) })
-		.then(r => r.json())
-		.then(c => {
-			openModal(`
-				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
-				<h2 class='text-xl mb-4 font-semibold text-center'>Редактировать колонку</h2>
-				<label class='block mb-1 text-sm text-gray-400'>Название:</label>
-				<input id='colName' value='${c.name}' class='w-full mb-3 p-2 rounded bg-gray-700'>
-				<label class='block mb-1 text-sm text-gray-400'>Цвет заголовка:</label>
-				<input id='colBg' type='color' value='${c.bg_color}' class='w-full mb-3 h-10 rounded'>
-				<label class='block mb-1 text-sm text-gray-400'>Цвет задач:</label>
-				<input id='taskBg' type='color' value='${c.task_color}' class='w-full mb-3 h-10 rounded'>
-				<label class='flex items-center gap-2 mb-3'>
-					<input id='autoComplete' type='checkbox' ${c.auto_complete == 1 ? 'checked' : ''}>
-					<span class='text-sm'>Автозавершать</span>
-				</label>
-				<label class='flex items-center gap-2 mb-3'>
-					<input id='timer' type='checkbox' ${c.timer == 1 ? 'checked' : ''}>
-					<span class='text-sm'>Таймер (время в колонке)</span>
-				</label>
-				<div class='flex gap-2'>
-					<button onclick='updateColumn(${id})' class='flex-1 bg-blue-600 hover:bg-blue-500 p-2 rounded'>Сохранить</button>
-					<button onclick='deleteColumn(${id})' class='flex-1 bg-red-700 hover:bg-red-600 p-2 rounded'>Удалить</button>
-				</div>
-			`);
-		});
-}
-
-// === Открытие модалки для добавления задачи ===
-function openAddTask() {
-	let respOptions = users.map(u => `<option value='${u.username}'>${u.name}</option>`).join('');
-	document.getElementById('modal-bg').classList.remove('hidden');
-	document.getElementById('modal-content').innerHTML = `
-		<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
-		<h2 class='text-xl mb-4 font-semibold text-center'>Новая задача</h2>
-
-		<label class='block mb-1 text-sm text-gray-400'>Заголовок задачи:</label>
-		<input id='title' placeholder='Например: Подготовить отчёт' class='w-full mb-3 p-2 rounded bg-gray-700'>
-
-		<label class='block mb-1 text-sm text-gray-400'>Описание:</label>
-		<textarea id='desc' placeholder='Описание задачи' class='w-full mb-3 p-2 rounded bg-gray-700'></textarea>
-
-		<label class='block mb-1 text-sm text-gray-400'>Исполнитель:</label>
-		<select id='resp' class='w-full mb-3 p-2 rounded bg-gray-700'>${respOptions}</select>
-
-		<label class='block mb-1 text-sm text-gray-400'>Срок выполнения:</label>
-		<input id='deadline' type='date' class='w-full mb-3 p-2 rounded bg-gray-700'>
-
-		<label class='block mb-1 text-sm text-gray-400'>Степень важности:</label>
-		<select id='imp' class='w-full mb-3 p-2 rounded bg-gray-700'>
-			<option value='не срочно'>🟩 Не срочно</option>
-			<option value='средне'>🟨 Средне</option>
-			<option value='срочно'>🟥 Срочно</option>
-		</select>
-
-		<label class='block mb-1 text-sm text-gray-400'>Поместить в колонку:</label>
-		<select id='col' class='w-full mb-4 p-2 rounded bg-gray-700'>
-			<?php
-			$res = $db->query("SELECT * FROM columns");
-			while ($r = $res->fetchArray(SQLITE3_ASSOC))
-				echo "<option value='{$r['id']}'>{$r['name']}</option>";
-			?>
-		</select>
-
-		<div class="flex gap-2">
-			<button onclick='saveTask()' class='flex-1 bg-blue-600 hover:bg-blue-500 p-2 rounded'>Создать</button>
-			<button onclick='closeModal()' class='flex-1 bg-gray-600 hover:bg-gray-500 p-2 rounded'>Отмена</button>
+<!-- Archive Modal Template -->
+<div id="archive-modal-template" style="display: none;">
+	<div class="modal-container large">
+		<div class="modal-header">
+			<h2 class="modal-title">Архив задач</h2>
+			<button onclick="closeModal()" class="modal-close-btn">
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+				</svg>
+			</button>
 		</div>
-	`;
-}
 
-// === Открытие модалки для редактирования задачи ===
-function editTask(id) {
-	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_task', id }) })
-		.then(r => r.json())
-		.then(t => {
-			let respOptions = users.map(u => `<option value='${u.username}' ${t.responsible === u.username ? 'selected' : ''}>${u.name}</option>`).join('');
-			openModal(`
-				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
-				<h2 class='text-xl mb-4 font-semibold text-center'>Редактировать задачу</h2>
-				<label class='block mb-1 text-sm text-gray-400'>Заголовок:</label>
-				<input id='title' value='${t.title}' class='w-full mb-3 p-2 rounded bg-gray-700'>
-				<label class='block mb-1 text-sm text-gray-400'>Описание:</label>
-				<textarea id='desc' class='w-full mb-3 p-2 rounded bg-gray-700'>${t.description}</textarea>
-				<label class='block mb-1 text-sm text-gray-400'>Исполнитель:</label>
-				<select id='resp' class='w-full mb-3 p-2 rounded bg-gray-700'>${respOptions}</select>
-				<label class='block mb-1 text-sm text-gray-400'>Срок:</label>
-				<input id='deadline' type='date' value='${t.deadline}' class='w-full mb-3 p-2 rounded bg-gray-700'>
-				<label class='block mb-1 text-sm text-gray-400'>Важность:</label>
-				<select id='imp' class='w-full mb-3 p-2 rounded bg-gray-700'>
-					<option ${t.importance==='не срочно'?'selected':''}>не срочно</option>
-					<option ${t.importance==='средне'?'selected':''}>средне</option>
-					<option ${t.importance==='срочно'?'selected':''}>срочно</option>
-				</select>
-				<div class='flex gap-2'>
-					<button onclick='updateTask(${id})' class='flex-1 bg-blue-600 hover:bg-blue-500 p-2 rounded'>Сохранить</button>
-					<button onclick='deleteTask(${id})' class='flex-1 bg-red-700 hover:bg-red-600 p-2 rounded'>Удалить</button>
-				</div>
-			`);
-		});
-}
+		<div class="modal-body">
+			<div class="archive-list">
+				<!-- Archive items will be inserted here -->
+			</div>
+		</div>
 
-// === Модалка архива ===
-function openArchive() {
-	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_archive' }) })
-		.then(r => r.json())
-		.then(d => {
-			let html = `
-				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
-				<h2 class='text-xl mb-4 font-semibold text-center'>Архивные задачи</h2>`;
-			if (!d.length) html += `<p class='text-gray-400 text-center'>Архив пуст</p>`;
-			else for (let t of d) {
-				html += `
-				<div class='bg-gray-700 p-3 rounded mb-3'>
-					<p class='font-semibold mb-1 text-lg'>${t.title}</p>
-					<p class='text-sm mb-2 text-gray-300'>${t.description}</p>
-					<div class='flex justify-between text-xs text-gray-400'>
-						<span>🧑‍💻 ${t.responsible_name || t.responsible}</span>
-						<span>📅 ${t.deadline || '—'}</span>
+		<div class="modal-footer">
+			<button onclick="closeModal()" class="btn-secondary">Закрыть</button>
+		</div>
+	</div>
+</div>
+
+<!-- Settings Modal Template -->
+<div id="settings-modal-template" style="display: none;">
+	<div class="modal-container xlarge">
+		<div class="modal-header">
+			<h2 class="modal-title">Управление системой</h2>
+			<button onclick="closeModal()" class="modal-close-btn">
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+				</svg>
+			</button>
+		</div>
+
+		<div class="modal-body" style="padding: 0;">
+			<div class="settings-layout">
+				<!-- Боковое меню -->
+				<div class="settings-sidebar">
+					<div class="settings-nav">
+						<button data-tab="users" class="settings-menu-item active">
+							<div class="nav-icon">
+								<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+								</svg>
+							</div>
+							<span class="nav-text">Пользователи</span>
+						</button>
+						
+						<button data-tab="integrations" class="settings-menu-item">
+							<div class="nav-icon">
+								<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+								</svg>
+							</div>
+							<span class="nav-text">Интеграции</span>
+						</button>
+						
+						<button data-tab="system" class="settings-menu-item">
+							<div class="nav-icon">
+								<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+								</svg>
+							</div>
+							<span class="nav-text">Система</span>
+						</button>
 					</div>
-					<p class='text-xs text-gray-500 mt-1'>Архивировано: ${t.archived_at}</p>
-					<button onclick='restore(${t.id})' class='bg-green-600 mt-3 px-3 py-1 rounded hover:bg-green-500'>Восстановить</button>
-				</div>`;
-			}
-			// Кнопки в футере
-			html += `<div class="flex gap-2 mt-4">
-				<button onclick='closeModal()' class='flex-1 bg-gray-600 hover:bg-gray-500 py-2 rounded'>Закрыть</button>`;
-			
-			// Добавлена кнопка "Очистить" (только для админов; предполагаем, что isAdmin доступна глобально)
-			if (typeof isAdmin !== 'undefined' && isAdmin) {
-				html += `<button onclick='clearArchive()' class='flex-1 bg-red-600 hover:bg-red-500 py-2 rounded flex items-center justify-center gap-1'>
-					🗑️ Очистить архив
-				</button>`;
-			}
-			html += `</div>`;
-			
-			document.getElementById('modal-content').innerHTML = html;
-			document.getElementById('modal-bg').classList.remove('hidden');
-		});
-}
-
-// === Редактирование пользователя ===
-function editUser(username) {
-	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_user', username }) })
-		.then(r => r.json())
-		.then(u => {
-			openModal(`
-				<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg">✖</button>
-				<h2 class='text-xl mb-4 font-semibold text-center'>Редактировать пользователя</h2>
-				<label class='block mb-1 text-sm text-gray-400'>Логин (нельзя изменить):</label>
-				<input id='editUser' value='${u.username}' class='w-full mb-3 p-2 rounded bg-gray-600' readonly>
-				<label class='block mb-1 text-sm text-gray-400'>Имя:</label>
-				<input id='editName' value='${u.name || ''}' class='w-full mb-3 p-2 rounded bg-gray-700' placeholder='Полное имя'>
-				<label class='block mb-1 text-sm text-gray-400'>Новый пароль (оставьте пустым, чтобы не менять):</label>
-				<input id='editPass' type='password' class='w-full mb-3 p-2 rounded bg-gray-700' placeholder='Новый пароль'>
-				<div class='flex items-center gap-2 mb-3'>
-					<input id='editIsAdmin' type='checkbox' ${u.is_admin ? 'checked' : ''}>
-					<label for='editIsAdmin' class='text-sm'>Администратор</label>
+					
+					<div class="sidebar-footer">
+						<div class="system-status">
+							<div class="status-indicator online"></div>
+							<span class="status-text">Система активна</span>
+						</div>
+					</div>
 				</div>
-				<div class='flex gap-2'>
-					<button onclick='updateUser("${u.username}")' class='flex-1 bg-blue-600 hover:bg-blue-500 p-2 rounded'>Сохранить</button>
-					<button onclick='closeModal()' class='flex-1 bg-gray-600 hover:bg-gray-500 p-2 rounded'>Отмена</button>
-				</div>
-			`);
-		});
-}
 
-// === Открытие модального окна настроек (улучшенная версия) ===
-function openUserSettings() {
-	// Загружаем пользователей
-	fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_users' }) })
-		.then(r => r.json())
-		.then(users => {
-			// Генерируем список пользователей с улучшенным видом
-			let userList = users.map(u => {
-				const adminIcon = u.is_admin ? '👑' : '👤';
-				const delBtn = u.username !== 'user1' ? 
-					`<button class="text-red-400 hover:text-red-300 text-sm px-2 py-1 rounded transition-colors" onclick="deleteUser('${u.username}')">Удалить</button>` : '';
-				return `
-					<div class="flex justify-between items-center p-3 bg-gray-700/50 rounded-lg mb-2 hover:bg-gray-700 transition-colors">
-						<div class="flex items-center gap-2">
-							<span class="text-lg">${adminIcon}</span>
-							<div>
-								<p class="font-medium text-gray-100">${u.name || u.username}</p>
-								<p class="text-xs text-gray-400">${u.username}</p>
+				<!-- Основной контент -->
+				<div class="settings-main">
+					<!-- Вкладка Пользователи -->
+					<div id="users-tab" class="tab-content active">
+						<div class="tab-header">
+							<h3 class="tab-title">Управление пользователями</h3>
+							<p class="tab-description">Добавление и редактирование пользователей системы</p>
+						</div>
+
+						<div class="content-section">
+							<h4 class="section-title">Новый пользователь</h4>
+							<div class="form-grid compact">
+								<div class="form-group">
+									<label class="form-label">Логин *</label>
+									<input id="newUser" placeholder="Уникальный идентификатор" class="form-input" required>
+								</div>
+								<div class="form-group">
+									<label class="form-label">Пароль *</label>
+									<input id="newPass" type="password" placeholder="Минимум 6 символов" class="form-input" required>
+								</div>
+								<div class="form-group">
+									<label class="form-label">Полное имя</label>
+									<input id="newName" placeholder="Иван Иванов" class="form-input">
+								</div>
+								<div class="form-group">
+									<label class="form-label">Права в системе</label>
+									<label class="checkbox-label large">
+										<input id="newIsAdmin" type="checkbox" class="checkbox-input">
+										<span class="checkbox-custom"></span>
+										<span class="checkbox-text">Администратор системы</span>
+									</label>
+								</div>
+							</div>
+							<button onclick="addUser()" class="btn-primary full-width">
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+								</svg>
+								Создать пользователя
+							</button>
+						</div>
+
+						<div class="content-section">
+							<div class="section-header">
+								<h4 class="section-title">Активные пользователи</h4>
+								<span class="users-count" id="users-count">0 пользователей</span>
+							</div>
+							<div id="users-list" class="users-list">
+								<!-- Users will be loaded here -->
 							</div>
 						</div>
-						<div class="flex gap-1">
-							<button class="text-blue-400 hover:text-blue-300 text-sm px-2 py-1 rounded transition-colors" onclick="editUser('${u.username}')">Редактировать</button>
-							${delBtn}
-						</div>
 					</div>
-				`;
-			}).join('');
 
-			// Загружаем Telegram настройки
-			fetch('api.php', { method: 'POST', body: new URLSearchParams({ action: 'get_telegram_settings' }) })
-				.then(r => r.json())
-				.then(tg => {
-					// HTML с вкладками для компактности
-					const modalHTML = `
-						<button onclick="closeModal()" class="absolute right-3 top-3 text-gray-400 hover:text-gray-200 text-lg transition-colors">✖</button>
-						
-						<div class="flex items-center justify-between mb-4">
-							<h2 class="text-xl font-semibold">⚙️ Настройки</h2>
+					<!-- Вкладка Интеграции -->
+					<div id="integrations-tab" class="tab-content">
+						<div class="tab-header">
+							<h3 class="tab-title">Интеграции и ссылки</h3>
+							<p class="tab-description">Управление быстрыми ссылками и внешними интеграциями</p>
 						</div>
 
-						<!-- Вкладки -->
-						<div class="flex mb-4 border-b border-gray-700">
-							<button id="tab-users" class="flex-1 py-2 px-4 text-sm font-medium border-b-2 border-blue-500 text-blue-300 bg-gray-700/50">Пользователи</button>
-							<button id="tab-telegram" class="flex-1 py-2 px-4 text-sm font-medium text-gray-400 hover:text-gray-200 bg-gray-800/50">Telegram</button>
-						</div>
-
-						<!-- Контент вкладки "Пользователи" -->
-						<div id="content-users" class="space-y-3 mb-4">
-							<div class="max-h-48 overflow-y-auto border border-gray-700 rounded-lg p-3 bg-gray-800/50">
-								${userList || '<p class="text-gray-400 text-center py-4">Нет пользователей</p>'}
+						<div class="content-section">
+							<h4 class="section-title">Telegram уведомления</h4>
+							<div class="form-grid">
+								<div class="form-group">
+									<label class="form-label">Токен бота</label>
+									<input id="tgToken" placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz" class="form-input">
+									<p class="form-hint">Получите у @BotFather в Telegram</p>
+								</div>
+								<div class="form-group">
+									<label class="form-label">Chat ID</label>
+									<input id="tgChat" placeholder="123456789" class="form-input">
+									<p class="form-hint">ID чата для отправки уведомлений</p>
+								</div>
 							</div>
 							
-							<!-- Компактная форма добавления -->
-							<div class="grid grid-cols-1 gap-2 p-3 bg-gray-700/30 rounded-lg">
-								<input id="newUser" placeholder="Логин" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-blue-500">
-								<input id="newName" placeholder="Имя" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-blue-500">
-								<input id="newPass" type="password" placeholder="Пароль" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-blue-500">
-								<label class="flex items-center gap-2 text-xs text-gray-300">
-									<input id="newIsAdmin" type="checkbox" class="rounded">
-									Админ
-								</label>
-								<button onclick="addUser()" class="bg-blue-600 hover:bg-blue-500 text-sm py-2 rounded transition-colors">➕ Добавить</button>
+							<div class="action-buttons">
+								<button onclick="saveTelegram()" class="btn-primary">
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+									</svg>
+									Сохранить настройки
+								</button>
+								<button onclick="testTelegram()" class="btn-secondary">
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+									</svg>
+									Тест уведомления
+								</button>
 							</div>
 						</div>
 
-						<!-- Контент вкладки "Telegram" (скрыт по умолчанию) -->
-						<div id="content-telegram" class="hidden space-y-3">
-							<div class="grid grid-cols-1 gap-2 p-3 bg-gray-700/30 rounded-lg">
-								<input id="tgToken" value="${tg.bot_token || ''}" placeholder="Bot Token" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500">
-								<input id="tgChat" value="${tg.chat_id || ''}" placeholder="Chat ID" class="p-2 rounded bg-gray-600 text-sm border border-gray-600 focus:border-green-500">
-								<div class="flex gap-2 pt-2">
-									<button onclick="saveTelegram()" class="flex-1 bg-green-600 hover:bg-green-500 text-sm py-2 rounded transition-colors">💾 Сохранить</button>
-									<button onclick="testTelegram()" class="flex-1 bg-blue-600 hover:bg-blue-500 text-sm py-2 rounded transition-colors">🧪 Тест</button>
+						<div class="content-section">
+							<h4 class="section-title">Быстрые ссылки</h4>
+							<div class="form-grid compact">
+								<div class="form-group">
+									<label class="form-label">Название ссылки</label>
+									<input id="newLinkName" placeholder="Документация проекта" class="form-input">
+								</div>
+								<div class="form-group">
+									<label class="form-label">URL адрес</label>
+									<input id="newLinkUrl" placeholder="https://example.com/docs" class="form-input">
+								</div>
+							</div>
+							<button onclick="adminAddLink()" class="btn-primary full-width">
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+								</svg>
+								Добавить ссылку
+							</button>
+						</div>
+
+						<div class="content-section">
+							<div class="section-header">
+								<h4 class="section-title">Список ссылок</h4>
+								<span class="links-count" id="links-count">0 ссылок</span>
+							</div>
+							<div id="admin-links-list" class="links-grid">
+								<!-- Links will be loaded here -->
+							</div>
+						</div>
+					</div>
+
+					<!-- Вкладка Система -->
+					<div id="system-tab" class="tab-content">
+						<div class="tab-header">
+							<h3 class="tab-title">Системная информация</h3>
+							<p class="tab-description">Техническая информация о системе и управление данными</p>
+						</div>
+
+						<div class="content-section">
+							<h4 class="section-title">Информация о сервере</h4>
+							<div class="system-info">
+								<div class="info-row">
+									<span class="info-label">Версия PHP</span>
+									<span class="info-value"><?php echo phpversion(); ?></span>
+								</div>
+								<div class="info-row">
+									<span class="info-label">База данных</span>
+									<span class="info-value">SQLite3 <?php echo class_exists('SQLite3') ? '✓' : '✗'; ?></span>
+								</div>
+								<div class="info-row">
+									<span class="info-label">Время сервера</span>
+									<span class="info-value"><?php echo date('d.m.Y H:i:s'); ?></span>
 								</div>
 							</div>
 						</div>
 
-						<!-- Кнопка закрытия -->
-						<button onclick="closeModal()" class="w-full bg-gray-600 hover:bg-gray-500 text-sm py-2 rounded transition-colors mt-4">Закрыть</button>
-					`;
+						<div class="content-section">
+							<h4 class="section-title">Управление данными</h4>
+							<div class="danger-actions">
+								<div class="danger-action">
+									<div class="danger-info">
+										<h5 class="danger-title">Очистка архива</h5>
+										<p class="danger-description">Удаление всех завершенных задач из архива</p>
+									</div>
+									<button onclick="clearArchive()" class="btn-danger">
+										Очистить архив
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
 
-					document.getElementById('modal-content').innerHTML = modalHTML;
-					document.getElementById('modal-content').className = 'bg-gray-800 p-6 rounded-xl w-[35rem] relative shadow-lg border border-gray-700'; // Устанавливаем ширину 35rem
-					document.getElementById('modal-bg').classList.remove('hidden');
+<!-- Edit User Modal Template -->
+<div id="edit-user-modal-template" style="display: none;">
+	<div class="modal-container medium">
+		<div class="modal-header">
+			<h2 class="modal-title">Редактировать пользователя</h2>
+			<button onclick="closeModal()" class="modal-close-btn">
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+				</svg>
+			</button>
+		</div>
 
-					// JS для переключения вкладок
-					document.getElementById('tab-users').onclick = () => {
-						document.getElementById('content-users').classList.remove('hidden');
-						document.getElementById('content-telegram').classList.add('hidden');
-						document.getElementById('tab-users').classList.add('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
-						document.getElementById('tab-users').classList.remove('text-gray-400', 'bg-gray-800/50');
-						document.getElementById('tab-telegram').classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
-						document.getElementById('tab-telegram').classList.add('text-gray-400', 'bg-gray-800/50');
-					};
+		<div class="modal-body">
+			<div class="form-group">
+				<label class="form-label">Логин</label>
+				<input id='editUser' class='form-input' readonly>
+			</div>
 
-					document.getElementById('tab-telegram').onclick = () => {
-						document.getElementById('content-users').classList.add('hidden');
-						document.getElementById('content-telegram').classList.remove('hidden');
-						document.getElementById('tab-telegram').classList.add('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
-						document.getElementById('tab-telegram').classList.remove('text-gray-400', 'bg-gray-800/50');
-						document.getElementById('tab-users').classList.remove('border-blue-500', 'text-blue-300', 'bg-gray-700/50');
-						document.getElementById('tab-users').classList.add('text-gray-400', 'bg-gray-800/50');
-					};
-				});
-		});
-}
-</script>
+			<div class="form-group">
+				<label class="form-label">Имя</label>
+				<input id='editName' class='form-input' placeholder='Полное имя'>
+			</div>
+
+			<div class="form-group">
+				<label class="form-label">Новый пароль</label>
+				<input id='editPass' type='password' class='form-input' placeholder='Оставьте пустым, чтобы не менять'>
+			</div>
+
+			<div class="checkbox-group">
+				<label class="checkbox-label">
+					<input id='editIsAdmin' type='checkbox' class='checkbox-input'>
+					<span class="checkbox-custom"></span>
+					<span class="checkbox-text">Администратор</span>
+				</label>
+			</div>
+		</div>
+
+		<div class="modal-footer">
+			<button onclick='closeModal()' class='btn-secondary'>Отмена</button>
+			<button onclick='updateUser()' class='btn-primary'>Сохранить</button>
+		</div>
+	</div>
+</div>
+
+<!-- Add Column Modal Template -->
+<div id="add-column-modal-template" style="display: none;">
+	<div class="modal-container xlarge">
+		<div class="modal-header">
+			<h2 class="modal-title">Добавить колонку</h2>
+			<button onclick="closeModal()" class="modal-close-btn">
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+				</svg>
+			</button>
+		</div>
+
+		<div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+			<div class="form-group">
+				<label class="form-label">Название колонки</label>
+				<input id='colName' placeholder='Например: В работе' class='form-input'>
+			</div>
+
+			<div class="form-group">
+				<label class="form-label">Цвет заголовка</label>
+				<div class="color-input-group">
+					<input id='colBg' type='color' value='#374151' class='color-input'>
+					<span class="color-value" id="colBgValue">#374151</span>
+				</div>
+			</div>
+
+			<div class="checkbox-group">
+				<label class="checkbox-label">
+					<input id='autoComplete' type='checkbox' class='checkbox-input'>
+					<span class="checkbox-custom"></span>
+					<span class="checkbox-text">Автоматически завершать задачи</span>
+				</label>
+			</div>
+
+			<div class="checkbox-group">
+				<label class="checkbox-label">
+					<input id='timer' type='checkbox' class='checkbox-input'>
+					<span class="checkbox-custom"></span>
+					<span class="checkbox-text">Включить таймер для задач</span>
+				</label>
+			</div>
+		</div>
+
+		<div class="modal-footer">
+			<button onclick='closeModal()' class='btn-secondary'>Отмена</button>
+			<button onclick='saveColumn()' class='btn-primary'>Создать колонку</button>
+		</div>
+	</div>
+</div>
+
+<!-- Edit Column Modal Template -->
+<div id="edit-column-modal-template" style="display: none;">
+	<div class="modal-container xlarge">
+		<div class="modal-header">
+			<h2 class="modal-title">Редактировать колонку</h2>
+			<button onclick="closeModal()" class="modal-close-btn">
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+				</svg>
+			</button>
+		</div>
+
+		<div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+			<div class="form-group">
+				<label class="form-label">Название колонки</label>
+				<input id='editColName' class='form-input'>
+			</div>
+
+			<div class="form-group">
+				<label class="form-label">Цвет заголовка</label>
+				<div class="color-input-group">
+					<input id='editColBg' type='color' class='color-input'>
+					<span class="color-value" id="editColBgValue">#374151</span>
+				</div>
+			</div>
+
+			<div class="checkbox-group">
+				<label class="checkbox-label">
+					<input id='editAutoComplete' type='checkbox' class='checkbox-input'>
+					<span class="checkbox-custom"></span>
+					<span class="checkbox-text">Автоматически завершать задачи</span>
+				</label>
+			</div>
+
+			<div class="checkbox-group">
+				<label class="checkbox-label">
+					<input id='editTimer' type='checkbox' class='checkbox-input'>
+					<span class="checkbox-custom"></span>
+					<span class="checkbox-text">Включить таймер для задач</span>
+				</label>
+			</div>
+		</div>
+
+		<div class="modal-footer">
+			<button onclick='deleteColumn()' class='btn-danger'>Удалить</button>
+			<button onclick='closeModal()' class='btn-secondary'>Отмена</button>
+			<button onclick='updateColumn()' class='btn-primary'>Сохранить</button>
+		</div>
+	</div>
+</div>
+
+<!-- Add Task Modal Template -->
+<div id="add-task-modal-template" style="display: none;">
+	<div class="modal-container task-mod-win">
+		<div class="modal-header">
+			<h2 class="modal-title">Новая задача</h2>
+			<button onclick="closeModal()" class="modal-close-btn">
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+				</svg>
+			</button>
+		</div>
+
+		<div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+			<div class="form-group">
+				<label class="form-label">Заголовок задачи</label>
+				<input id='taskTitle' placeholder='Например: Подготовить отчёт' class='form-input'>
+			</div>
+
+			<div class="form-group">
+				<label class="form-label">Описание</label>
+				<div class="textarea-with-picker">
+					<textarea id='taskDesc' placeholder='Описание задачи...' class='form-input' style="min-height: 100px;"></textarea>
+					<button type="button" onclick="openLinkPicker()" class="link-picker-btn" title="Добавить ссылку">
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+						</svg>
+					</button>
+				</div>
+			</div>
+
+			<div class="form-grid">
+				<div class="form-group">
+					<label class="form-label">Исполнитель</label>
+					<select id='taskResp' class='form-select'></select>
+				</div>
+
+				<div class="form-group">
+					<label class="form-label">Срок выполнения</label>
+					<input id='taskDeadline' type='date' class='form-input'>
+				</div>
+			</div>
+
+			<div class="form-grid">
+				<div class="form-group">
+					<label class="form-label">Приоритет</label>
+					<select id='taskImp' class='form-select'>
+						<option value='не срочно'>🟢 Не срочно</option>
+						<option value='средне'>🟡 Средне</option>
+						<option value='срочно'>🔴 Срочно</option>
+					</select>
+				</div>
+
+				<div class="form-group">
+					<label class="form-label">Колонка</label>
+					<select id='taskCol' class='form-select'></select>
+				</div>
+			</div>
+		</div>
+
+		<div class="modal-footer">
+			<button onclick='closeModal()' class='btn-secondary'>Отмена</button>
+			<button onclick='saveTask()' class='btn-primary'>Создать задачу</button>
+		</div>
+	</div>
+</div>
+
+<!-- Edit Task Modal Template -->
+<div id="edit-task-modal-template" style="display: none;">
+	<div class="modal-container task-mod-win">
+		<div class="modal-header">
+			<h2 class="modal-title">Редактировать задачу</h2>
+			<button onclick="closeModal()" class="modal-close-btn">
+				<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+				</svg>
+			</button>
+		</div>
+
+		<div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+			<div class="form-group">
+				<label class="form-label">Заголовок задачи</label>
+				<input id='editTaskTitle' class='form-input'>
+			</div>
+
+			<div class="form-group">
+				<label class="form-label">Описание</label>
+				<div class="textarea-with-picker">
+					<textarea id='editTaskDesc' class='form-input' style="min-height: 100px;"></textarea>
+					<button type="button" onclick="openLinkPicker()" class="link-picker-btn" title="Добавить ссылку">
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+						</svg>
+					</button>
+				</div>
+			</div>
+
+			<div class="form-grid">
+				<div class="form-group">
+					<label class="form-label">Исполнитель</label>
+					<select id='editTaskResp' class='form-select'></select>
+				</div>
+
+				<div class="form-group">
+					<label class="form-label">Срок выполнения</label>
+					<input id='editTaskDeadline' type='date' class='form-input'>
+				</div>
+			</div>
+
+			<div class="form-grid">
+				<div class="form-group">
+					<label class="form-label">Приоритет</label>
+					<select id='editTaskImp' class='form-select'>
+						<option value='не срочно'>🟢 Не срочно</option>
+						<option value='средне'>🟡 Средне</option>
+						<option value='срочно'>🔴 Срочно</option>
+					</select>
+				</div>
+
+				<div class="form-group">
+					<label class="form-label">Колонка</label>
+					<select id='editTaskCol' class='form-select'></select>
+				</div>
+			</div>
+		</div>
+
+		<div class="modal-footer">
+			<button onclick='deleteTask()' class='btn-danger'>Удалить</button>
+			<button onclick='closeModal()' class='btn-secondary'>Отмена</button>
+			<button onclick='updateTask()' class='btn-primary'>Сохранить</button>
+		</div>
+	</div>
+</div>

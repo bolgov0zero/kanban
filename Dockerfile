@@ -9,20 +9,8 @@ RUN apt-get update && \
     docker-php-ext-install pdo_sqlite && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
-# Копируем приложение (для последующего копирования в финальный образ)
-COPY ./panel_files /var/www/html
-COPY version.json /var/www/html
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
-
 # === ФИНАЛЬНЫЙ ОБРАЗ (минимальный) ===
 FROM php:8.1-apache-bullseye
-
-# Копируем PHP-расширения и приложение
-COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
-COPY --from=builder /usr/local/etc/php/ /usr/local/etc/php/
-COPY --from=builder /var/www/html/ /var/www/html/
-COPY --from=builder /usr/local/bin/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 # Устанавливаем runtime-пакеты + openssl (временно)
 RUN apt-get update && \
@@ -49,6 +37,9 @@ RUN apt-get update && \
     apt-get remove -y openssl && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
+
+# Копируем приложение
+COPY ./ /var/www/html/
 
 # Настраиваем Apache и PHP (всё в одном RUN)
 RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
@@ -96,10 +87,17 @@ RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
         echo "error_reporting = E_ALL"; \
         echo "log_errors = On"; \
         echo "error_log = /var/log/php_errors.log"; \
-    } > /usr/local/etc/php/conf.d/errors.ini
+    } > /usr/local/etc/php/conf.d/errors.ini && \
+    \
+    # Устанавливаем права
+    chown -R www-data:www-data /var/www/html && \
+    find /var/www/html -type f -exec chmod 644 {} \; && \
+    find /var/www/html -type d -exec chmod 755 {} \; && \
+    chmod +x /var/www/html/entrypoint.sh && \
+    chmod +x /var/www/html/monitoring.php
 
 # Открываем порты
 EXPOSE 80 443
 
 # Запуск
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/var/www/html/entrypoint.sh"]

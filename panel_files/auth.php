@@ -1,5 +1,4 @@
 <?php
-error_reporting(E_ALL);
 session_start();
 $db = new SQLite3('/data/db.sqlite');
 

@@ -1,154 +1,169 @@
 <?php
-date_default_timezone_set('UTC');
-echo date('Y-m-d H:i:s UTC') . " - Скрипт запущен.\n";
+date_default_timezone_set('Europe/Moscow');
 
-// Проверяем подключение к БД
-try {
-	$db = new SQLite3('/data/db.sqlite');
-	echo "БД подключена OK.\n";
-} catch (Exception $e) {
-	echo "Ошибка подключения БД: " . $e->getMessage() . "\n";
-	sleep(60);
-	continue;
-}
-
-// Функция sendTelegram (без изменений)
-function sendTelegram($bot_token, $chat_id, $text) {
+// Функция для отправки уведомлений в Telegram
+function sendTelegramNotification($bot_token, $chat_id, $message) {
 	if (empty($bot_token) || empty($chat_id)) {
-		error_log("Telegram: empty token or chat_id");
 		return false;
 	}
+	
 	$url = "https://api.telegram.org/bot{$bot_token}/sendMessage";
-	$post_data = [
+	$data = [
 		'chat_id' => $chat_id,
-		'text' => $text,
+		'text' => $message,
 		'parse_mode' => 'HTML'
 	];
-
-	$ch = curl_init();
-	curl_setopt($ch, CURLOPT_URL, $url);
-	curl_setopt($ch, CURLOPT_POST, true);
-	curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post_data));
-	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-	curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-
-	$result = curl_exec($ch);
-	$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-	$error = curl_error($ch);
-	curl_close($ch);
-
-	if ($error) {
-		error_log("Telegram cURL error: " . $error);
-		return false;
-	}
-
-	$response = json_decode($result, true);
-	if ($http_code !== 200 || !($response['ok'] ?? false)) {
-		error_log("Telegram API error: HTTP $http_code, Response: " . print_r($response, true));
-		return false;
-	}
-
-	return true;
+	
+	$options = [
+		'http' => [
+			'header' => "Content-type: application/x-www-form-urlencoded\r\n",
+			'method' => 'POST',
+			'content' => http_build_query($data)
+		]
+	];
+	
+	$context = stream_context_create($options);
+	$result = @file_get_contents($url, false, $context);
+	
+	return $result !== false;
 }
 
-// Infinite loop
-while (true) {
-	echo date('Y-m-d H:i:s UTC') . " - Начинаем проверку таймеров...\n";
+// Функция для форматирования времени
+function formatTime($seconds) {
+	$minutes = floor($seconds / 60);
+	$hours = floor($minutes / 60);
+	$days = floor($hours / 24);
+	
+	if ($days > 0) {
+		return $days . 'д ' . ($hours % 24) . 'ч';
+	} elseif ($hours > 0) {
+		return $hours . 'ч ' . ($minutes % 60) . 'м';
+	} elseif ($minutes > 0) {
+		return $minutes . 'м ' . ($seconds % 60) . 'с';
+	} else {
+		return $seconds . 'с';
+	}
+}
+
+// Основной цикл мониторинга
+function monitorTasks() {
+	$db_path = __DIR__ . '/db.sqlite';
+	
+	// Проверяем существование БД
+	if (!file_exists($db_path)) {
+		error_log("Database not found: $db_path");
+		return;
+	}
+	
 	try {
-		// Получаем настройки
-		echo "Шаг 1: Запрос настроек...\n";
-		$tg = $db->querySingle("SELECT bot_token, chat_id, timer_threshold FROM telegram_settings WHERE id=1", true);
-		echo "Настройки: threshold=" . ($tg['timer_threshold'] ?? 'NULL') . ", token=" . (empty($tg['bot_token']) ? 'EMPTY' : 'OK') . ", chat=" . (empty($tg['chat_id']) ? 'EMPTY' : 'OK') . "\n";
+		$db = new SQLite3($db_path);
 		
-		if (empty($tg['bot_token']) || empty($tg['chat_id']) || empty($tg['timer_threshold'])) {
-			echo "Пропуск: настройки неполные. Sleep 60s.\n";
-			sleep(60);
-			continue;
-		}
-
-		$threshold_sec = $tg['timer_threshold'] * 60;
-		echo "Threshold в сек: $threshold_sec\n";
-
-		// Запрос ВСЕХ задач (с отладкой)
-		echo "Шаг 2: Выполняем запрос всех задач с таймером...\n";
-		$query_all = "SELECT t.id, t.title, t.moved_at, t.notified_at, c.name as col_name 
-					  FROM tasks t JOIN columns c ON t.column_id = c.id 
-					  WHERE c.timer = 1 AND t.moved_at IS NOT NULL";
-		$all_tasks_result = $db->query($query_all);
-		if ($all_tasks_result === false) {
-			echo "Ошибка запроса: " . $db->lastErrorMsg() . "\n";
-			sleep(60);
-			continue;
-		}
-		$num_all = $all_tasks_result->numRows();
-		echo "Найдено задач с таймером: $num_all\n";
+		// Получаем настройки Telegram
+		$tg_settings = $db->querySingle("SELECT bot_token, chat_id FROM telegram_settings WHERE id=1", true);
+		$bot_token = $tg_settings['bot_token'] ?? '';
+		$chat_id = $tg_settings['chat_id'] ?? '';
 		
-		if ($num_all == 0) {
-			echo "Нет задач для проверки. Sleep 60s.\n";
-			sleep(60);
-			continue;
+		if (empty($bot_token) || empty($chat_id)) {
+			error_log("Telegram settings not configured");
+			return;
 		}
-
-		// Логируем каждую задачу
-		echo "Детали задач:\n";
-		while ($row = $all_tasks_result->fetchArray(SQLITE3_ASSOC)) {
-			$moved_time = strtotime($row['moved_at'] . ' UTC');
-			$elapsed_sec = time() - $moved_time;
-			$elapsed_min = round($elapsed_sec / 60, 1);
-			$reason = ($row['notified_at'] !== null) ? "notified уже отправлено" : ($elapsed_sec <= $threshold_sec ? "elapsed ($elapsed_min мин) <= threshold ($threshold_sec сек)" : "OK для отправки");
-			echo "  Задача {$row['id']} '{$row['title']}' в {$row['col_name']}: moved_at={$row['moved_at']}, elapsed=$elapsed_min мин, $reason\n";
+		
+		// Получаем задачи с включенным таймером и временем перемещения
+		$query = "
+			SELECT t.id, t.title, t.moved_at, t.responsible, 
+				   c.name as column_name, u.name as responsible_name,
+				   u2.name as author_name
+			FROM tasks t 
+			LEFT JOIN columns c ON t.column_id = c.id 
+			LEFT JOIN users u ON t.responsible = u.username 
+			LEFT JOIN users u2 ON t.author = u2.username 
+			WHERE c.timer = 1 
+			AND t.moved_at IS NOT NULL 
+			AND t.completed = 0
+		";
+		
+		$result = $db->query($query);
+		$notified_tasks = [];
+		
+		// Читаем уже уведомленные задачи из файла
+		$notified_file = __DIR__ . '/notified_tasks.json';
+		if (file_exists($notified_file)) {
+			$notified_tasks = json_decode(file_get_contents($notified_file), true) ?: [];
 		}
-
-		// Запрос для уведомлений
-		echo "Шаг 3: Запрос задач для уведомления...\n";
-		$query_notify = "SELECT t.id, t.title, t.moved_at FROM tasks t 
-						 JOIN columns c ON t.column_id = c.id 
-						 WHERE c.timer = 1 
-						 AND t.moved_at IS NOT NULL 
-						 AND t.notified_at IS NULL 
-						 AND (strftime('%s', 'now', 'utc') - strftime('%s', t.moved_at, 'utc')) > :threshold";
-		$stmt = $db->prepare($query_notify);
-		if ($stmt === false) {
-			echo "Ошибка prepare: " . $db->lastErrorMsg() . "\n";
-			sleep(60);
-			continue;
-		}
-		$stmt->bindValue(':threshold', $threshold_sec, SQLITE3_INTEGER);
-		$notify_tasks = $stmt->execute();
-		if ($notify_tasks === false) {
-			echo "Ошибка execute: " . $db->lastErrorMsg() . "\n";
-			sleep(60);
-			continue;
-		}
-		$num_notify = $notify_tasks->numRows();
-		echo "Задач для уведомления: $num_notify\n";
-
-		$notify_count = 0;
-		while ($row = $notify_tasks->fetchArray(SQLITE3_ASSOC)) {
-			echo "  Отправляем для задачи {$row['id']}...\n";
-			$moved_time = strtotime($row['moved_at'] . ' UTC');
-			$elapsed_sec = time() - $moved_time;
-			$elapsed = gmdate('H:i:s', $elapsed_sec);
-			$text = "⏰ <b>Таймер превышен!</b>\n<blockquote>📋 <b>Задача:</b> <i>" . htmlspecialchars($row['title']) . "</i>\n🕐 <b>Время в колонке:</b> <i>$elapsed</i></blockquote>";
-
-			if (sendTelegram($tg['bot_token'], $tg['chat_id'], $text)) {
-				$update = $db->prepare("UPDATE tasks SET notified_at = datetime('now', 'utc') WHERE id = :id");
-				$update->bindValue(':id', $row['id'], SQLITE3_INTEGER);
-				$update->execute();
-				echo "    -> Успех! notified_at = " . gmdate('Y-m-d H:i:s \UTC') . "\n";
-				$notify_count++;
-			} else {
-				echo "    -> Ошибка отправки (см. error.log)\n";
+		
+		$current_time = time();
+		$updated = false;
+		
+		while ($task = $result->fetchArray(SQLITE3_ASSOC)) {
+			$task_id = $task['id'];
+			$moved_time = strtotime($task['moved_at']);
+			$seconds_passed = ($current_time - $moved_time);
+			
+			// Если прошло больше 1 минуты (60 секунд) и еще не уведомляли
+			if ($seconds_passed > 60 && !in_array($task_id, $notified_tasks)) {
+				$responsible_name = $task['responsible_name'] ?: $task['responsible'];
+				$column_name = $task['column_name'] ?: 'Неизвестная колонка';
+				$time_in_column = formatTime($seconds_passed);
+				
+				$message = "⚠️ <b>Задача превысила лимит времени</b>\n\n";
+				$message .= "📋 <b>Задача:</b> " . htmlspecialchars($task['title']) . "\n";
+				$message .= "📂 <b>Колонка:</b> " . htmlspecialchars($column_name) . "\n";
+				$message .= "⏱️ <b>Время в колонке:</b> " . $time_in_column . "\n";
+				$message .= "👤 <b>Исполнитель:</b> " . htmlspecialchars($responsible_name) . "\n";
+				$message .= "\n<i>Задача находится в этой колонке дольше установленного лимита</i>";
+				
+				// Отправляем уведомление
+				if (sendTelegramNotification($bot_token, $chat_id, $message)) {
+					$notified_tasks[] = $task_id;
+					$updated = true;
+					error_log("Sent notification for task {$task_id} ({$time_in_column} in column)");
+				} else {
+					error_log("Failed to send notification for task {$task_id}");
+				}
+			}
+			
+			// Дополнительное уведомление каждые 30 минут после первого уведомления
+			if (in_array($task_id, $notified_tasks) && $seconds_passed > 60) {
+				$hours_passed = $seconds_passed / 3600;
+				
+				// Уведомляем каждые 30 минут (1800 секунд)
+				if ($seconds_passed % 1800 < 60) { // В пределах минуты от кратного 30 минут
+					$time_in_column = formatTime($seconds_passed);
+					
+					$message = "⏰ <b>Напоминание о задаче</b>\n\n";
+					$message .= "📋 <b>Задача:</b> " . htmlspecialchars($task['title']) . "\n";
+					$message .= "📂 <b>Колонка:</b> " . htmlspecialchars($column_name) . "\n";
+					$message .= "⏱️ <b>Время в колонке:</b> " . $time_in_column . "\n";
+					$message .= "👤 <b>Исполнитель:</b> " . htmlspecialchars($responsible_name) . "\n";
+					$message .= "\n<i>Задача всё ещё находится в этой колонке</i>";
+					
+					sendTelegramNotification($bot_token, $chat_id, $message);
+					error_log("Sent reminder for task {$task_id} ({$time_in_column} in column)");
+				}
 			}
 		}
-		echo "Итого уведомлений отправлено: $notify_count\n";
+		
+		// Сохраняем обновленный список уведомленных задач
+		if ($updated) {
+			file_put_contents($notified_file, json_encode($notified_tasks));
+		}
+		
+		// Очищаем старые записи (задачи которые уже завершены или удалены)
+		$all_tasks = $db->query("SELECT id FROM tasks WHERE completed = 0")->fetchAll(SQLITE3_ASSOC);
+		$current_task_ids = array_column($all_tasks, 'id');
+		$notified_tasks = array_intersect($notified_tasks, $current_task_ids);
+		file_put_contents($notified_file, json_encode(array_values($notified_tasks)));
+		
+		$db->close();
+		
 	} catch (Exception $e) {
-		echo date('Y-m-d H:i:s UTC') . " - Ошибка: " . $e->getMessage() . "\n";
-		error_log(date('Y-m-d H:i:s UTC') . " - Monitoring error: " . $e->getMessage() . "\n");
+		error_log("Monitoring error: " . $e->getMessage());
 	}
+}
 
-	echo "Sleep 60s...\n";
-	sleep(60);
+// Бесконечный цикл с проверкой каждую минуту
+while (true) {
+	monitorTasks();
+	sleep(60); // 1 минута
 }
 ?>

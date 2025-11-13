@@ -19,6 +19,11 @@ chmod -R 775 /opt/kanban /data
 chmod 600 /etc/apache2/ssl/server.key
 chmod 644 /etc/apache2/ssl/server.crt
 
+# Создаем файл для отслеживания уведомленных задач
+touch /var/www/html/notified_tasks.json
+chown www-data:www-data /var/www/html/notified_tasks.json
+chmod 664 /var/www/html/notified_tasks.json
+
 # Устанавливаем supervisord для управления фоновыми процессами
 mkdir -p /etc/supervisor/conf.d
 
@@ -29,26 +34,35 @@ nodaemon=true
 logfile=/var/log/supervisord.log
 pidfile=/var/run/supervisord.pid
 
-[program:client-monitor]
+[program:task-monitor]
 command=php /var/www/html/monitoring.php
 autostart=true
 autorestart=true
-stderr_logfile=/var/log/monitoring.err.log
-stdout_logfile=/var/log/monitoring.out.log
+stderr_logfile=/var/log/task-monitor.err.log
+stdout_logfile=/var/log/task-monitor.out.log
+user=www-data
+
+[program:apache2]
+command=apache2-foreground
+autostart=true
+autorestart=true
+stderr_logfile=/var/log/apache2.err.log
+stdout_logfile=/var/log/apache2.out.log
 EOF
 
 # Запускаем init_db.php и логируем вывод
-echo "Запуск init_db.php..." >> /var/log/init_db.log
+echo "$(date): Запуск init_db.php..." >> /var/log/init_db.log
 php /var/www/html/init_db.php >> /var/log/init_db.log 2>&1
 if [ $? -ne 0 ]; then
     echo "Ошибка при выполнении init_db.php, смотрите /var/log/init_db.log" >&2
 fi
 
-# Запускаем supervisord
-supervisord -c /etc/supervisor/supervisord.conf &
-sleep 2  # Ждём запуска
-supervisorctl start client-monitor  # Явный старт
-echo "client-monitor started" >> /var/log/supervisord.log
+# Инициализируем файл уведомленных задач если пустой
+if [ ! -s /var/www/html/notified_tasks.json ]; then
+    echo "[]" > /var/www/html/notified_tasks.json
+    chown www-data:www-data /var/www/html/notified_tasks.json
+fi
 
-# Запускаем Apache в foreground-режиме
-exec apache2-foreground
+# Запускаем supervisord
+echo "$(date): Запуск supervisord..." >> /var/log/supervisord.log
+exec supervisord -c /etc/supervisor/supervisord.conf
