@@ -19,54 +19,47 @@ RUN mkdir -p /etc/apache2/ssl && \
 
 # Копируем ВСЕ файлы
 COPY ./panel_files /var/www/html/
-# Копируем entrypoint.sh с правами на выполнение (Docker 20.10+)
+# Копируем entrypoint.sh с правами на выполнение (Docker 20.10+; если ошибка, удали --chmod=755 и добавь RUN chmod +x ниже)
 COPY --chmod=755 entrypoint.sh /var/www/html/
 
 # Настраиваем Apache
 RUN a2enmod rewrite ssl && \
     echo "ServerName localhost" >> /etc/apache2/apache2.conf
 
-# Создаем SSL конфигурацию (используем heredoc для читаемости)
-RUN cat > /etc/apache2/sites-available/kanban-ssl.conf << 'EOF'
-<VirtualHost *:443>
-    DocumentRoot /var/www/html
-    SSLEngine on
-    SSLCertificateFile /etc/apache2/ssl/server.crt
-    SSLCertificateKeyFile /etc/apache2/ssl/server.key
-    <Directory /var/www/html>
-        AllowOverride All
-        Require all granted
-    </Directory>
-</VirtualHost>
-EOF
+# Создаем SSL конфигурацию (цепочка echo для избежания heredoc-ошибок)
+RUN echo "<VirtualHost *:443>" > /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "    DocumentRoot /var/www/html" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "    SSLEngine on" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "    SSLCertificateFile /etc/apache2/ssl/server.crt" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "    SSLCertificateKeyFile /etc/apache2/ssl/server.key" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "    <Directory /var/www/html>" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "        AllowOverride All" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "        Require all granted" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "    </Directory>" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "</VirtualHost>" >> /etc/apache2/sites-available/kanban-ssl.conf
 
 # Создаем HTTP конфигурацию с редиректом
-RUN cat > /etc/apache2/sites-available/kanban-http.conf << 'EOF'
-<VirtualHost *:80>
-    ServerName localhost
-    Redirect permanent / https://localhost/
-</VirtualHost>
-EOF
+RUN echo "<VirtualHost *:80>" > /etc/apache2/sites-available/kanban-http.conf && \
+    echo "    ServerName localhost" >> /etc/apache2/sites-available/kanban-http.conf && \
+    echo "    Redirect permanent / https://localhost/" >> /etc/apache2/sites-available/kanban-http.conf && \
+    echo "</VirtualHost>" >> /etc/apache2/sites-available/kanban-http.conf
 
 # Включаем наши сайты, отключаем стандартные
 RUN a2dissite 000-default default-ssl && \
     a2ensite kanban-http kanban-ssl
 
-# Настраиваем PHP
-RUN cat > /usr/local/etc/php/conf.d/kanban.ini << 'EOF'
-display_errors = Off
-display_startup_errors = Off
-error_reporting = E_ALL
-log_errors = On
-error_log = /var/log/php_errors.log
-EOF
+# Настраиваем PHP (цепочка echo)
+RUN echo "display_errors = Off" > /usr/local/etc/php/conf.d/kanban.ini && \
+    echo "display_startup_errors = Off" >> /usr/local/etc/php/conf.d/kanban.ini && \
+    echo "error_reporting = E_ALL" >> /usr/local/etc/php/conf.d/kanban.ini && \
+    echo "log_errors = On" >> /usr/local/etc/php/conf.d/kanban.ini && \
+    echo "error_log = /var/log/php_errors.log" >> /usr/local/etc/php/conf.d/kanban.ini
 
-# Устанавливаем права
+# Устанавливаем права (если --chmod=755 не сработал, раскомментируй следующую строку)
+# RUN chmod +x /var/www/html/entrypoint.sh
 RUN chown -R www-data:www-data /var/www/html && \
     find /var/www/html -type f -exec chmod 644 {} \; && \
-    find /var/www/html -type d -exec chmod 755 {} \; && \
-    # Отладка: проверим права на entrypoint
-    ls -l /var/www/html/entrypoint.sh
+    find /var/www/html -type d -exec chmod 755 {} \;
 
 # Создаем необходимые директории
 RUN mkdir -p /var/log /data && \
