@@ -28,28 +28,10 @@ function sendTelegramNotification($bot_token, $chat_id, $message) {
 	return $result !== false;
 }
 
-// Функция для форматирования времени
-function formatTime($seconds) {
-	$minutes = floor($seconds / 60);
-	$hours = floor($minutes / 60);
-	$days = floor($hours / 24);
-	
-	if ($days > 0) {
-		return $days . 'д ' . ($hours % 24) . 'ч';
-	} elseif ($hours > 0) {
-		return $hours . 'ч ' . ($minutes % 60) . 'м';
-	} elseif ($minutes > 0) {
-		return $minutes . 'м ' . ($seconds % 60) . 'с';
-	} else {
-		return $seconds . 'с';
-	}
-}
-
 // Основной цикл мониторинга
 function monitorTasks() {
-	$db_path = '/data/db.sqlite';
+	$db_path = '/var/www/html/data/db.sqlite';
 	
-	// Проверяем существование БД
 	if (!file_exists($db_path)) {
 		error_log("Database not found: $db_path");
 		return;
@@ -68,7 +50,7 @@ function monitorTasks() {
 			return;
 		}
 		
-		// Получаем задачи с включенным таймером и временем перемещения
+		// Получаем задачи с включенным таймером
 		$query = "
 			SELECT t.id, t.title, t.moved_at, t.responsible, 
 				   c.name as column_name, u.name as responsible_name
@@ -84,7 +66,7 @@ function monitorTasks() {
 		$notified_tasks = [];
 		
 		// Читаем уже уведомленные задачи из файла
-		$notified_file = __DIR__ . '/notified_tasks.json';
+		$notified_file = '/var/www/html/notified_tasks.json';
 		if (file_exists($notified_file)) {
 			$notified_tasks = json_decode(file_get_contents($notified_file), true) ?: [];
 		}
@@ -101,12 +83,11 @@ function monitorTasks() {
 			if ($seconds_passed > 60 && !in_array($task_id, $notified_tasks)) {
 				$responsible_name = $task['responsible_name'] ?: $task['responsible'];
 				$column_name = $task['column_name'] ?: 'Неизвестная колонка';
-				$time_in_column = formatTime($seconds_passed);
 				
 				$message = "⚠️ <b>Задача превысила лимит времени</b>\n\n";
 				$message .= "📋 <b>Задача:</b> " . htmlspecialchars($task['title']) . "\n";
 				$message .= "📂 <b>Колонка:</b> " . htmlspecialchars($column_name) . "\n";
-				$message .= "⏱️ <b>Время в колонке:</b> " . $time_in_column . "\n";
+				$message .= "⏱️ <b>Время в колонке:</b> " . round($seconds_passed / 60, 1) . " минут\n";
 				$message .= "👤 <b>Исполнитель:</b> " . htmlspecialchars($responsible_name) . "\n";
 				$message .= "\n<i>Задача находится в этой колонке дольше установленного лимита</i>";
 				
@@ -114,7 +95,7 @@ function monitorTasks() {
 				if (sendTelegramNotification($bot_token, $chat_id, $message)) {
 					$notified_tasks[] = $task_id;
 					$updated = true;
-					error_log("Sent notification for task {$task_id} ({$time_in_column} in column)");
+					error_log("Sent notification for task {$task_id}");
 				} else {
 					error_log("Failed to send notification for task {$task_id}");
 				}
@@ -126,7 +107,7 @@ function monitorTasks() {
 			file_put_contents($notified_file, json_encode($notified_tasks));
 		}
 		
-		// Очищаем старые записи (задачи которые уже завершены или удалены)
+		// Очищаем старые записи
 		$all_tasks = $db->query("SELECT id FROM tasks WHERE completed = 0")->fetchAll(SQLITE3_ASSOC);
 		$current_task_ids = array_column($all_tasks, 'id');
 		$notified_tasks = array_intersect($notified_tasks, $current_task_ids);

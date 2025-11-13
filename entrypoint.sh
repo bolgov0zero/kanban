@@ -28,7 +28,7 @@ logfile=/var/log/supervisord.log
 pidfile=/var/run/supervisord.pid
 
 [program:task-monitor]
-command=php /var/www/html/monitoring.php
+command=php /usr/local/bin/monitoring.php
 autostart=true
 autorestart=true
 stderr_logfile=/var/log/task-monitor.err.log

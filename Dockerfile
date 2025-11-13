@@ -37,11 +37,15 @@ RUN apt-get update && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
 
+# Копируем entrypoint и monitoring ПЕРВЫМИ с правильными правами
+COPY entrypoint.sh /usr/local/bin/
+
+# Даем права на выполнение
+RUN chmod +x /usr/local/bin/entrypoint.sh && \
+    chmod +x /usr/local/bin/monitoring.php
+
 # Копируем основные файлы приложения из panel_files
 COPY ./panel_files/ /var/www/html/
-
-# Копируем скрипты из корня
-COPY entrypoint.sh /var/www/html/
 
 # Настраиваем Apache
 RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
@@ -89,15 +93,13 @@ RUN echo "display_errors = Off" > /usr/local/etc/php/conf.d/kanban.ini && \
     echo "log_errors = On" >> /usr/local/etc/php/conf.d/kanban.ini && \
     echo "error_log = /var/log/php_errors.log" >> /usr/local/etc/php/conf.d/kanban.ini
 
-# Устанавливаем права на все файлы
+# Устанавливаем права на файлы приложения
 RUN chown -R www-data:www-data /var/www/html && \
     find /var/www/html -type f -exec chmod 644 {} \; && \
-    find /var/www/html -type d -exec chmod 755 {} \; && \
-    chmod +x /var/www/html/entrypoint.sh && \
-    chmod +x /var/www/html/monitoring.php
+    find /var/www/html -type d -exec chmod 755 {} \;
 
 # Открываем порты
 EXPOSE 80 443
 
 # Запуск
-ENTRYPOINT ["/var/www/html/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
