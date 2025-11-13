@@ -12,7 +12,7 @@ RUN apt-get update && \
 # === ФИНАЛЬНЫЙ ОБРАЗ (минимальный) ===
 FROM php:8.1-apache-bullseye
 
-# Устанавливаем runtime-пакеты + openssl (временно)
+# Устанавливаем runtime-пакеты
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libsqlite3-0 \
@@ -33,72 +33,61 @@ RUN apt-get update && \
     chmod 600 /etc/apache2/ssl/server.key && \
     chmod 644 /etc/apache2/ssl/server.crt && \
     \
-    # Удаляем openssl и кэш
-    apt-get remove -y openssl && \
+    # Удаляем ненужные пакеты и кэш
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
 
 # Копируем приложение
 COPY . /var/www/html/
 
-# Настраиваем Apache и PHP (всё в одном RUN)
-RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
-    \
-    # Включаем модули через симлинки
-    ln -sf /etc/apache2/mods-available/rewrite.load /etc/apache2/mods-enabled/rewrite.load && \
-    ln -sf /etc/apache2/mods-available/ssl.load /etc/apache2/mods-enabled/ssl.load && \
-    ln -sf /etc/apache2/mods-available/socache_shmcb.load /etc/apache2/mods-enabled/socache_shmcb.load && \
-    \
-    # files.conf
-    { \
-        echo "Alias /files /opt/kanban"; \
-        echo "<Directory /opt/kanban>"; \
-        echo "    Options Indexes FollowSymLinks"; \
-        echo "    AllowOverride All"; \
-        echo "    Require all granted"; \
-        echo "</Directory>"; \
-    } > /etc/apache2/conf-available/files.conf && \
-    ln -sf /etc/apache2/conf-available/files.conf /etc/apache2/conf-enabled/files.conf && \
-    \
-    # default-ssl.conf (HTTPS)
-    { \
-        echo "<VirtualHost *:443>"; \
-        echo "    DocumentRoot /var/www/html"; \
-        echo "    SSLEngine on"; \
-        echo "    SSLCertificateFile /etc/apache2/ssl/server.crt"; \
-        echo "    SSLCertificateKeyFile /etc/apache2/ssl/server.key"; \
-        echo "    <Directory /var/www/html>"; \
-        echo "        Options Indexes FollowSymLinks"; \
-        echo "        AllowOverride None"; \
-        echo "        Require all granted"; \
-        echo "    </Directory>"; \
-        echo "</VirtualHost>"; \
-    } > /etc/apache2/sites-available/default-ssl.conf && \
-    ln -sf /etc/apache2/sites-available/default-ssl.conf /etc/apache2/sites-enabled/default-ssl.conf && \
-    \
-    # 000-default.conf (редирект HTTP → HTTPS)
-    { \
-        echo "<VirtualHost *:80>"; \
-        echo "    ServerName localhost"; \
-        echo "    Redirect permanent / https://localhost/"; \
-        echo "</VirtualHost>"; \
-    } > /etc/apache2/sites-available/000-default.conf && \
-    ln -sf /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-enabled/000-default.conf && \
-    \
-    # Отключаем default конфиг если существует
-    rm -f /etc/apache2/sites-enabled/000-default.conf && \
-    \
-    # PHP: отключение ошибок в продакшене
-    { \
-        echo "display_errors = Off"; \
-        echo "display_startup_errors = Off"; \
-        echo "error_reporting = E_ALL"; \
-        echo "log_errors = On"; \
-        echo "error_log = /var/log/php_errors.log"; \
-    } > /usr/local/etc/php/conf.d/errors.ini && \
-    \
-    # Устанавливаем права
-    chown -R www-data:www-data /var/www/html && \
+# Настраиваем Apache
+RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
+
+# Включаем необходимые модули Apache
+RUN a2enmod rewrite ssl
+
+# Создаем конфигурацию для файлов
+RUN echo "Alias /files /opt/kanban" > /etc/apache2/conf-available/kanban-files.conf && \
+    echo "<Directory /opt/kanban>" >> /etc/apache2/conf-available/kanban-files.conf && \
+    echo "    Options Indexes FollowSymLinks" >> /etc/apache2/conf-available/kanban-files.conf && \
+    echo "    AllowOverride All" >> /etc/apache2/conf-available/kanban-files.conf && \
+    echo "    Require all granted" >> /etc/apache2/conf-available/kanban-files.conf && \
+    echo "</Directory>" >> /etc/apache2/conf-available/kanban-files.conf
+
+RUN a2enconf kanban-files
+
+# Создаем SSL виртуальный хост
+RUN echo "<VirtualHost *:443>" > /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "    DocumentRoot /var/www/html" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "    SSLEngine on" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "    SSLCertificateFile /etc/apache2/ssl/server.crt" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "    SSLCertificateKeyFile /etc/apache2/ssl/server.key" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "    <Directory /var/www/html>" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "        Options Indexes FollowSymLinks" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "        AllowOverride None" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "        Require all granted" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "    </Directory>" >> /etc/apache2/sites-available/kanban-ssl.conf && \
+    echo "</VirtualHost>" >> /etc/apache2/sites-available/kanban-ssl.conf
+
+# Создаем HTTP виртуальный хост с редиректом на HTTPS
+RUN echo "<VirtualHost *:80>" > /etc/apache2/sites-available/kanban-http.conf && \
+    echo "    ServerName localhost" >> /etc/apache2/sites-available/kanban-http.conf && \
+    echo "    Redirect permanent / https://localhost/" >> /etc/apache2/sites-available/kanban-http.conf && \
+    echo "</VirtualHost>" >> /etc/apache2/sites-available/kanban-http.conf
+
+# Отключаем стандартные сайты и включаем наши
+RUN a2dissite 000-default default-ssl && \
+    a2ensite kanban-http kanban-ssl
+
+# Настраиваем PHP
+RUN echo "display_errors = Off" > /usr/local/etc/php/conf.d/kanban.ini && \
+    echo "display_startup_errors = Off" >> /usr/local/etc/php/conf.d/kanban.ini && \
+    echo "error_reporting = E_ALL" >> /usr/local/etc/php/conf.d/kanban.ini && \
+    echo "log_errors = On" >> /usr/local/etc/php/conf.d/kanban.ini && \
+    echo "error_log = /var/log/php_errors.log" >> /usr/local/etc/php/conf.d/kanban.ini
+
+# Устанавливаем права
+RUN chown -R www-data:www-data /var/www/html && \
     find /var/www/html -type f -exec chmod 644 {} \; && \
     find /var/www/html -type d -exec chmod 755 {} \; && \
     chmod +x /var/www/html/entrypoint.sh && \

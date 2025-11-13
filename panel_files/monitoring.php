@@ -47,7 +47,7 @@ function formatTime($seconds) {
 
 // Основной цикл мониторинга
 function monitorTasks() {
-	$db_path = __DIR__ . '/db.sqlite';
+	$db_path = '/data/db.sqlite';
 	
 	// Проверяем существование БД
 	if (!file_exists($db_path)) {

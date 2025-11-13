@@ -1,15 +1,14 @@
 #!/bin/bash
 
-# Создаём директорию для логов, если её нет
+# Создаём директорию для логов
 mkdir -p /var/log
 chown www-data:www-data /var/log
 chmod 775 /var/log
 
-# Устанавливаем права
-chown -R www-data:www-data /var/www/html
+# Устанавливаем базовые права
+chown -R www-data:www-data /var/www/html /opt/kanban /data /etc/apache2/ssl
 find /var/www/html -type f -exec chmod 644 {} \;
 find /var/www/html -type d -exec chmod 755 {} \;
-chown -R www-data:www-data /opt/kanban /data /etc/apache2/ssl
 chmod -R 775 /opt/kanban /data
 chmod 600 /etc/apache2/ssl/server.key
 chmod 644 /etc/apache2/ssl/server.crt
@@ -22,7 +21,7 @@ chmod 664 /var/www/html/notified_tasks.json
 # Создаём конфигурацию для supervisord
 mkdir -p /etc/supervisor/conf.d
 
-cat > /etc/supervisor/conf.d/monitoring.conf <<EOF
+cat > /etc/supervisor/conf.d/kanban.conf << 'EOF'
 [supervisord]
 nodaemon=true
 logfile=/var/log/supervisord.log
@@ -44,11 +43,11 @@ stderr_logfile=/var/log/apache2.err.log
 stdout_logfile=/var/log/apache2.out.log
 EOF
 
-# Запускаем init_db.php
+# Инициализируем БД
 echo "$(date): Запуск init_db.php..." >> /var/log/init_db.log
 php /var/www/html/init_db.php >> /var/log/init_db.log 2>&1
 
-# Инициализируем файл уведомленных задач если пустой
+# Инициализируем файл уведомленных задач
 if [ ! -s /var/www/html/notified_tasks.json ]; then
     echo "[]" > /var/www/html/notified_tasks.json
     chown www-data:www-data /var/www/html/notified_tasks.json
