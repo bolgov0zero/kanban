@@ -39,11 +39,15 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/*
 
 # Копируем приложение
-COPY ./ /var/www/html/
+COPY . /var/www/html/
 
 # Настраиваем Apache и PHP (всё в одном RUN)
 RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
-    a2enmod rewrite ssl && \
+    \
+    # Включаем модули через симлинки
+    ln -sf /etc/apache2/mods-available/rewrite.load /etc/apache2/mods-enabled/rewrite.load && \
+    ln -sf /etc/apache2/mods-available/ssl.load /etc/apache2/mods-enabled/ssl.load && \
+    ln -sf /etc/apache2/mods-available/socache_shmcb.load /etc/apache2/mods-enabled/socache_shmcb.load && \
     \
     # files.conf
     { \
@@ -54,7 +58,7 @@ RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
         echo "    Require all granted"; \
         echo "</Directory>"; \
     } > /etc/apache2/conf-available/files.conf && \
-    a2enconf files && \
+    ln -sf /etc/apache2/conf-available/files.conf /etc/apache2/conf-enabled/files.conf && \
     \
     # default-ssl.conf (HTTPS)
     { \
@@ -70,7 +74,7 @@ RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
         echo "    </Directory>"; \
         echo "</VirtualHost>"; \
     } > /etc/apache2/sites-available/default-ssl.conf && \
-    a2ensite default-ssl && \
+    ln -sf /etc/apache2/sites-available/default-ssl.conf /etc/apache2/sites-enabled/default-ssl.conf && \
     \
     # 000-default.conf (редирект HTTP → HTTPS)
     { \
@@ -79,6 +83,10 @@ RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf && \
         echo "    Redirect permanent / https://localhost/"; \
         echo "</VirtualHost>"; \
     } > /etc/apache2/sites-available/000-default.conf && \
+    ln -sf /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-enabled/000-default.conf && \
+    \
+    # Отключаем default конфиг если существует
+    rm -f /etc/apache2/sites-enabled/000-default.conf && \
     \
     # PHP: отключение ошибок в продакшене
     { \

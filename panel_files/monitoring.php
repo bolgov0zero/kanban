@@ -71,12 +71,10 @@ function monitorTasks() {
 		// Получаем задачи с включенным таймером и временем перемещения
 		$query = "
 			SELECT t.id, t.title, t.moved_at, t.responsible, 
-				   c.name as column_name, u.name as responsible_name,
-				   u2.name as author_name
+				   c.name as column_name, u.name as responsible_name
 			FROM tasks t 
 			LEFT JOIN columns c ON t.column_id = c.id 
 			LEFT JOIN users u ON t.responsible = u.username 
-			LEFT JOIN users u2 ON t.author = u2.username 
 			WHERE c.timer = 1 
 			AND t.moved_at IS NOT NULL 
 			AND t.completed = 0
@@ -119,26 +117,6 @@ function monitorTasks() {
 					error_log("Sent notification for task {$task_id} ({$time_in_column} in column)");
 				} else {
 					error_log("Failed to send notification for task {$task_id}");
-				}
-			}
-			
-			// Дополнительное уведомление каждые 30 минут после первого уведомления
-			if (in_array($task_id, $notified_tasks) && $seconds_passed > 60) {
-				$hours_passed = $seconds_passed / 3600;
-				
-				// Уведомляем каждые 30 минут (1800 секунд)
-				if ($seconds_passed % 1800 < 60) { // В пределах минуты от кратного 30 минут
-					$time_in_column = formatTime($seconds_passed);
-					
-					$message = "⏰ <b>Напоминание о задаче</b>\n\n";
-					$message .= "📋 <b>Задача:</b> " . htmlspecialchars($task['title']) . "\n";
-					$message .= "📂 <b>Колонка:</b> " . htmlspecialchars($column_name) . "\n";
-					$message .= "⏱️ <b>Время в колонке:</b> " . $time_in_column . "\n";
-					$message .= "👤 <b>Исполнитель:</b> " . htmlspecialchars($responsible_name) . "\n";
-					$message .= "\n<i>Задача всё ещё находится в этой колонке</i>";
-					
-					sendTelegramNotification($bot_token, $chat_id, $message);
-					error_log("Sent reminder for task {$task_id} ({$time_in_column} in column)");
 				}
 			}
 		}

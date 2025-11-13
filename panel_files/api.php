@@ -104,7 +104,6 @@ switch ($action) {
 		foreach([':t'=>'title',':d'=>'description',':r'=>'responsible',':dl'=>'deadline',':i'=>'importance',':c'=>'column_id'] as $k=>$v)
 			$stmt->bindValue($k,$_POST[$v]);
 		$stmt->bindValue(':cr',date('Y-m-d H:i:s'));
-		$stmt->bindValue(':a',$user);
 		$stmt->execute();
 		// Уведомление
 		if (!empty($bot_token) && !empty($chat_id)) {
