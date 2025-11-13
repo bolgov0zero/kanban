@@ -1,72 +1,54 @@
 #!/bin/bash
-set -e  # Выходим на любой ошибке
 
-# Устанавливаем права на SSL сертификаты (если нужно перезаписать)
-chown -R root:root /etc/apache2/ssl
+# Создаём директорию для логов, если её нет
+mkdir -p /var/log
+chown www-data:www-data /var/log
+chmod 775 /var/log
+
+# Устанавливаем права на монтированную директорию /var/www/html
+chown -R www-data:www-data /var/www/html
+find /var/www/html -type f -exec chmod 644 {} \;
+find /var/www/html -type d -exec chmod 755 {} \;
+
+# Если .htaccess существует, устанавливаем права
+[ -f /var/www/html/.htaccess ] && chmod 644 /var/www/html/.htaccess || true
+
+# Устанавливаем права на директории /opt/kanban, /data и /etc/apache2/ssl
+chown -R www-data:www-data /opt/kanban /data /etc/apache2/ssl
+chmod -R 775 /opt/kanban /data
 chmod 600 /etc/apache2/ssl/server.key
 chmod 644 /etc/apache2/ssl/server.crt
 
-# Устанавливаем права на данные
-mkdir -p /data
-chown -R www-data:www-data /data
-chmod 775 /data
-
-# Создаем файл для уведомленных задач
-touch /var/www/html/notified_tasks.json
-chown www-data:www-data /var/www/html/notified_tasks.json
-chmod 664 /var/www/html/notified_tasks.json
-
-# Инициализируем файл уведомленных задач, если пустой
-if [ ! -s /var/www/html/notified_tasks.json ]; then
-    echo "[]" > /var/www/html/notified_tasks.json
-    chown www-data:www-data /var/www/html/notified_tasks.json
-fi
-
-# Создаем конфигурацию supervisord, если директория пуста
+# Устанавливаем supervisord для управления фоновыми процессами
 mkdir -p /etc/supervisor/conf.d
-if [ ! -f /etc/supervisor/conf.d/kanban.conf ]; then
-    cat > /etc/supervisor/conf.d/kanban.conf << 'EOF'
+
+# Создаём конфигурацию для supervisord
+cat > /etc/supervisor/conf.d/monitoring.conf <<EOF
 [supervisord]
 nodaemon=true
 logfile=/var/log/supervisord.log
 pidfile=/var/run/supervisord.pid
 
-[program:task-monitor]
+[program:client-monitor]
 command=php /var/www/html/monitoring.php
 autostart=true
 autorestart=true
-stderr_logfile=/var/log/task-monitor.err.log
-stdout_logfile=/var/log/task-monitor.out.log
-user=www-data
-
-[program:apache2]
-command=apache2-foreground
-autostart=true
-autorestart=true
-stderr_logfile=/var/log/apache2.err.log
-stdout_logfile=/var/log/apache2.out.log
+stderr_logfile=/var/log/monitoring.err.log
+stdout_logfile=/var/log/monitoring.out.log
 EOF
-fi
 
-# Создаём базовый supervisord.conf, если его нет (из пакета supervisor)
-if [ ! -f /etc/supervisor/supervisord.conf ]; then
-    echo "[include]" > /etc/supervisor/supervisord.conf
-    echo "files = /etc/supervisor/conf.d/*.conf" >> /etc/supervisor/supervisord.conf
-fi
-
-# Инициализируем БД
-echo "$(date): Инициализация БД..." >> /var/log/init_db.log
+# Запускаем init_db.php и логируем вывод
+echo "Запуск init_db.php..." >> /var/log/init_db.log
 php /var/www/html/init_db.php >> /var/log/init_db.log 2>&1
-if [ $? -eq 0 ]; then
-    echo "$(date): БД успешно инициализирована" >> /var/log/init_db.log
-else
-    echo "$(date): Ошибка инициализации БД" >> /var/log/init_db.log
-    exit 1  # Выходим, если БД не инициализировалась
+if [ $? -ne 0 ]; then
+    echo "Ошибка при выполнении init_db.php, смотрите /var/log/init_db.log" >&2
 fi
-
-# Логируем права на entrypoint для отладки
-echo "$(date): Права на entrypoint.sh: $(ls -l /var/www/html/entrypoint.sh)" >> /var/log/entrypoint.log
 
 # Запускаем supervisord
-echo "$(date): Запуск supervisord..." >> /var/log/supervisord.log
-exec supervisord -c /etc/supervisor/supervisord.conf
+supervisord -c /etc/supervisor/supervisord.conf &
+sleep 2  # Ждём запуска
+supervisorctl start client-monitor  # Явный старт
+echo "client-monitor started" >> /var/log/supervisord.log
+
+# Запускаем Apache в foreground-режиме
+exec apache2-foreground
